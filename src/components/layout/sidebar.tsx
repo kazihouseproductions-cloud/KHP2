@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { Icon } from "@/components/ui/icon";
+import { ShellIcon } from "@/components/ui/shell-icon";
 import { sections } from "@/lib/navigation";
 
 export function Sidebar({
@@ -34,6 +35,10 @@ export function Sidebar({
         >
           <Icon name="close" />
         </button>
+        <div className="sidebar-heading">
+          <ShellIcon name="workspace" size={25} />
+          <span>Workspace</span>
+        </div>
         <nav aria-label="Main navigation" className="nav-items">
           {sections.map(({ id, label }) => (
             <a
@@ -42,10 +47,10 @@ export function Sidebar({
               className="nav-link"
               aria-current={active === id ? "page" : undefined}
               onClick={onClose}
-              title={label}
+              title={id === "workspace" ? "Board" : label}
             >
-              <Icon name={id} size={19} />
-              <span>{label}</span>
+              <ShellIcon name={id === "workspace" ? "board" : id} />
+              <span>{id === "workspace" ? "Board" : label}</span>
             </a>
           ))}
         </nav>

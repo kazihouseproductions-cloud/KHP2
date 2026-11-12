@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef } from "react";
-import { Icon } from "@/components/ui/icon";
+import { ShellIcon } from "@/components/ui/shell-icon";
 
 export type Crumb = { title: string; href: string };
 
@@ -11,10 +11,9 @@ export function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
   }, [currentHref]);
   return (
     <nav ref={trail} aria-label="Breadcrumb" className="breadcrumbs">
-      <Icon name="workspace" size={19} />
       {crumbs.map((part, index) => (
         <Fragment key={part.href}>
-          {index > 0 && <Icon name="chevron" size={14} />}
+          {index > 0 && <ShellIcon name="chevron" size={6} />}
           <a
             href={part.href}
             aria-current={index === crumbs.length - 1 ? "page" : undefined}

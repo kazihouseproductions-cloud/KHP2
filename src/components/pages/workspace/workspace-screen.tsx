@@ -11,6 +11,7 @@ import { sections } from "@/lib/navigation";
 import { boardLevels, resolveBoardPath } from "@/lib/workspaces";
 import { listenToBoardStorage, useBoardStore } from "@/stores/board-store";
 import { BoardCanvas } from "./board-canvas";
+import { BoardMemberFilter } from "./board-member-filter";
 import { BoardSurface } from "./board-surface";
 import { PinForm } from "./pin-form";
 
@@ -43,9 +44,9 @@ export function WorkspaceScreen() {
   const currentSection = sections.find((s) => s.id === route.section);
   const invalidRoute =
     route.invalid || path.length !== route.ids.length || (route.section && !currentSection);
-  const crumbs: Crumb[] = [{ title: "Workspace", href: "#/" }];
-  if (currentSection)
-    crumbs.push({ title: currentSection.label, href: `#/tool/${currentSection.id}` });
+  const crumbs: Crumb[] = currentSection
+    ? [{ title: currentSection.label, href: `#/tool/${currentSection.id}` }]
+    : [{ title: "Board", href: "#/" }];
   for (const step of path) crumbs.push({ title: step.item.title, href: step.href });
 
   return (
@@ -114,6 +115,7 @@ export function WorkspaceScreen() {
         </div>
       </main>
       <WorkspaceUtilities />
+      {!currentSection && !invalidRoute && <BoardMemberFilter />}
       {form && <PinForm {...form} onClose={() => setForm(null)} />}
     </div>
   );

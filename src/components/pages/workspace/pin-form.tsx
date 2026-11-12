@@ -2,28 +2,34 @@ import { useState, type FormEvent } from "react";
 import { Modal } from "@/components/common/modal";
 import { Icon } from "@/components/ui/icon";
 import { WorkspaceGlyph } from "@/components/ui/workspace-glyph";
-import { pinIcons, workspaceIcons, type WorkspaceIconId } from "@/lib/workspaces";
+import { type BoardItem, pinIcons, workspaceIcons, type WorkspaceIconId } from "@/lib/workspaces";
 import { useBoardStore } from "@/stores/board-store";
 
 export function PinForm({
   parentId,
   noun,
+  item,
   onClose,
 }: {
   parentId: string | null;
   noun: string;
+  item?: BoardItem;
   onClose: () => void;
 }) {
-  const options = noun === "Project" || noun === "Section" ? pinIcons : workspaceIcons;
-  const [title, setTitle] = useState("");
-  const [icon, setIcon] = useState<WorkspaceIconId>(options === pinIcons ? "cutter" : "ogopogo");
+  const options = item || noun === "Project" || noun === "Section" ? pinIcons : workspaceIcons;
+  const [title, setTitle] = useState(item?.title ?? "");
+  const [icon, setIcon] = useState<WorkspaceIconId>(
+    item?.icon ?? (options === pinIcons ? "cutter" : "ogopogo"),
+  );
   const [error, setError] = useState("");
   const add = useBoardStore((s) => s.add);
+  const update = useBoardStore((s) => s.update);
 
   function submit(event: FormEvent) {
     event.preventDefault();
     try {
-      add(title, icon, parentId);
+      if (item) update(item, title, icon);
+      else add(title, icon, parentId);
       onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to save the pin.");
@@ -31,7 +37,7 @@ export function PinForm({
   }
 
   return (
-    <Modal title={`Add ${noun}`} onClose={onClose}>
+    <Modal title={item ? "Edit Pin" : `Add ${noun}`} onClose={onClose}>
       <form onSubmit={submit} className="space-y-6">
         <label className="block space-y-2">
           <span className="text-sm font-medium">Title</span>
@@ -84,7 +90,7 @@ export function PinForm({
             Cancel
           </button>
           <button type="submit" className="primary-button">
-            Create {noun.toLowerCase()}
+            {item ? "Save changes" : `Create ${noun.toLowerCase()}`}
           </button>
         </footer>
       </form>

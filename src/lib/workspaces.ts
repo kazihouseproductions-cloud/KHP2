@@ -21,6 +21,7 @@ export type BoardItem = {
   icon: WorkspaceIconId;
   parentId: string | null;
   createdAt: number;
+  memberIds?: string[];
 };
 
 export function isBoardItem(value: unknown): value is BoardItem {
@@ -32,8 +33,32 @@ export function isBoardItem(value: unknown): value is BoardItem {
     item.title.trim().length > 0 &&
     (item.parentId === null || typeof item.parentId === "string") &&
     pinIcons.some((icon) => icon.id === item.icon) &&
-    typeof item.createdAt === "number"
+    typeof item.createdAt === "number" &&
+    (item.memberIds === undefined ||
+      (Array.isArray(item.memberIds) && item.memberIds.every((id) => typeof id === "string")))
   );
+}
+
+export function collectPinIds(items: BoardItem[], rootId: string) {
+  const ids = new Set([rootId]);
+  const children = new Map<string, string[]>();
+  for (const item of items) {
+    if (item.parentId !== null) {
+      const siblings = children.get(item.parentId) ?? [];
+      siblings.push(item.id);
+      children.set(item.parentId, siblings);
+    }
+  }
+  const queue = [rootId];
+  for (let index = 0; index < queue.length; index++) {
+    for (const child of children.get(queue[index]) ?? []) {
+      if (!ids.has(child)) {
+        ids.add(child);
+        queue.push(child);
+      }
+    }
+  }
+  return ids;
 }
 
 export function childHref(parentHref: string, depth: number, id: string) {
@@ -59,4 +84,19 @@ export function resolveBoardPath(ids: string[], items: BoardItem[]) {
     });
   }
   return path;
+}
+
+export function boardItemHref(items: BoardItem[], id: string): string | null {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  let current = byId.get(id);
+  while (current) {
+    if (seen.has(current.id) || ids.length >= boardLevels.length) return null;
+    seen.add(current.id);
+    ids.unshift(current.id);
+    if (current.parentId === null) return resolveBoardPath(ids, items).at(-1)?.href ?? null;
+    current = byId.get(current.parentId);
+  }
+  return null;
 }

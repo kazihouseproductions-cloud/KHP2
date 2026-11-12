@@ -23,6 +23,9 @@ const controls = {
   chevron: "m9 5 7 7-7 7",
   check: "m5 12 4 4 10-10",
   menu: "M3 6h18M3 12h18M3 18h18",
+  more: "M5 12h.01M12 12h.01M19 12h.01",
+  edit: "m15 4 5 5M4 20l4-1L20 7a2 2 0 0 0-4-4L4 15v5Z",
+  trash: "M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7",
 } as const;
 
 type IconName = InterfaceIcon | keyof typeof controls;

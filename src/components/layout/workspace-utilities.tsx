@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icon";
+import { ShellIcon } from "@/components/ui/shell-icon";
+import { sections } from "@/lib/navigation";
 
-type Panel = "Account" | "Notifications" | "Members" | "Chat";
+type Panel = "Account" | "Notifications" | "Apps" | "Chat";
 
 const panelMessages: Record<Panel, string> = {
   Account: "You are using a local workspace.",
   Notifications: "No notifications.",
-  Members: "No members have been added.",
+  Apps: "Workspace tools",
   Chat: "Messaging is not connected.",
 };
 
@@ -52,11 +54,14 @@ export function WorkspaceUtilities() {
     <div ref={container}>
       <div className="account-pill">
         <button type="button" className="account-name" {...props("Account")}>
-          <Icon name="account" size={28} />
+          <ShellIcon name="account" size={30} />
           <span>Username</span>
         </button>
+        <button type="button" className="icon-action" {...props("Chat")}>
+          <ShellIcon name="chat" size={27} />
+        </button>
         <button type="button" className="icon-action" {...props("Notifications")}>
-          <Icon name="bell" size={27} />
+          <ShellIcon name="bell" size={30} />
         </button>
         <button
           type="button"
@@ -65,14 +70,12 @@ export function WorkspaceUtilities() {
           title="Sign out is unavailable in local mode"
           disabled
         >
-          <Icon name="logout" size={27} />
+          <ShellIcon name="logout" size={30} />
         </button>
       </div>
-      <button type="button" className="utility-circle people-button" {...props("Members")}>
-        <Icon name="people" size={44} />
-      </button>
-      <button type="button" className="utility-circle chat-button" {...props("Chat")}>
-        <Icon name="chat" size={34} />
+      <button type="button" className="utility-circle apps-button" {...props("Apps")}>
+        <ShellIcon name="apps" size={29} />
+        <span>Apps</span>
       </button>
       {panel && (
         <section
@@ -94,7 +97,22 @@ export function WorkspaceUtilities() {
               <Icon name="close" size={16} />
             </button>
           </header>
-          <p className="text-sm text-neutral-600">{panelMessages[panel]}</p>
+          {panel === "Apps" ? (
+            <nav aria-label="Workspace apps" className="apps-menu">
+              {sections.map(({ id, label }) => (
+                <a
+                  key={id}
+                  href={id === "workspace" ? "#/" : `#/tool/${id}`}
+                  onClick={() => setPanel(null)}
+                >
+                  <ShellIcon name={id === "workspace" ? "board" : id} />
+                  <span>{id === "workspace" ? "Board" : label}</span>
+                </a>
+              ))}
+            </nav>
+          ) : (
+            <p className="text-sm text-neutral-600">{panelMessages[panel]}</p>
+          )}
         </section>
       )}
     </div>
