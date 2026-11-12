@@ -2,6 +2,34 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as members from "../src/lib/members.ts";
 import * as workspaces from "../src/lib/workspaces.ts";
+import { memberTasksHref, parseBoardRoute, resolveNodeRoute } from "../src/lib/board-route.ts";
+
+function boardHref(items: workspaces.BoardItem[], id: string) {
+  return (
+    workspaces.resolveBoardPath(id, workspaces.indexBoardItems(items).byId).at(-1)?.href ?? null
+  );
+}
+
+test("a member's task view keeps the board it was opened from", () => {
+  assert.deepEqual(parseBoardRoute(memberTasksHref("#/", "nadia")), {
+    kind: "home",
+    tasksFor: "nadia",
+  });
+  const href = workspaces.nodeHref({
+    id: "room/1?draft",
+    parentId: "studio",
+    title: "Room",
+    createdAt: 1,
+    icon: "office",
+  });
+  assert.deepEqual(parseBoardRoute(memberTasksHref(href, "rafi")), {
+    kind: "node",
+    id: "room/1?draft",
+    workspace: false,
+    tasksFor: "rafi",
+  });
+  assert.equal(parseBoardRoute("#/tool/tasks?tasksFor=nadia").kind, "invalid");
+});
 
 test("clearing the member selection restores every pin, including unassigned pins", () => {
   for (const pin of [{}, { memberIds: [] }, { memberIds: ["nadia"] }])
@@ -15,23 +43,21 @@ test("a member task links to the correct nested section board", () => {
     { id: "p", parentId: "d" },
     { id: "s", parentId: "p" },
   ].map((item) => ({ ...item, title: item.id, icon: "office" as const, createdAt: 1 }));
-  assert.equal(
-    workspaces.boardItemHref(items, "s"),
-    "#/workspace/w/department/d/project/p/section/s",
+  assert.equal(boardHref(items, "s"), "#/section/s");
+  const { byId } = workspaces.indexBoardItems(items);
+  const oldLink = "#/workspace/w/department/d/project/p/section/s";
+  assert.deepEqual(
+    resolveNodeRoute(parseBoardRoute(oldLink), byId),
+    resolveNodeRoute(parseBoardRoute("#/section/s"), byId),
   );
+  assert.deepEqual(resolveNodeRoute(parseBoardRoute(oldLink.replace("/d/", "/other/")), byId), []);
 });
 
 test("missing or cyclic boards never produce broken member task links", () => {
   const base = { title: "Pin", icon: "office" as const, createdAt: 1 };
-  assert.equal(
-    workspaces.boardItemHref([{ ...base, id: "orphan", parentId: "gone" }], "orphan"),
-    null,
-  );
-  assert.equal(
-    workspaces.boardItemHref([{ ...base, id: "cycle", parentId: "cycle" }], "cycle"),
-    null,
-  );
-  assert.equal(workspaces.boardItemHref([], "missing"), null);
+  assert.equal(boardHref([{ ...base, id: "orphan", parentId: "gone" }], "orphan"), null);
+  assert.equal(boardHref([{ ...base, id: "cycle", parentId: "cycle" }], "cycle"), null);
+  assert.equal(boardHref([], "missing"), null);
 });
 
 test("only directly assigned pins match the selected member", () => {

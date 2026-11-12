@@ -16,13 +16,15 @@ function displayDate(value: string) {
 export function TaskCard({
   task,
   onEdit,
+  showStatus = false,
   onDragStart,
   onDragEnd,
 }: {
   task: Task;
   onEdit: () => void;
-  onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
-  onDragEnd: () => void;
+  showStatus?: boolean;
+  onDragStart?: (event: DragEvent<HTMLButtonElement>) => void;
+  onDragEnd?: () => void;
 }) {
   return (
     <button
@@ -30,7 +32,7 @@ export function TaskCard({
       className="task-card"
       aria-label={`Edit task: ${task.title}`}
       onClick={onEdit}
-      draggable
+      draggable={!!onDragStart}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
@@ -53,7 +55,8 @@ export function TaskCard({
       </span>
       <span className="mt-auto grid grid-cols-2 gap-2 pt-5 text-xs leading-snug">
         <span className="break-words">
-          <strong>Assigned to:</strong> {task.assignedTo || "—"}
+          <strong>{showStatus ? "Status:" : "Assigned to:"}</strong>{" "}
+          {showStatus ? task.status : task.assignedTo || "—"}
         </span>
         <span className="justify-self-end break-words">
           <strong>Assigned by:</strong> {task.assignedBy || "—"}

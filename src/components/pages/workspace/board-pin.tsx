@@ -63,6 +63,8 @@ export function BoardPin({
         aria-label={label}
         aria-description={dimmed ? `Not assigned to ${member?.name}` : undefined}
         className="board-pin group"
+        style={{ color: item.color }}
+        data-catalog-icon={item.icon.startsWith("core:") || undefined}
       >
         <span className="pin-face pin-image">
           <WorkspaceGlyph icon={item.icon} />
@@ -137,12 +139,7 @@ export function BoardPin({
       {modal &&
         createPortal(
           modal.action === "edit" ? (
-            <PinForm
-              item={modal.item}
-              parentId={modal.item.parentId}
-              noun="Pin"
-              onClose={closeModal}
-            />
+            <PinForm item={modal.item} parentId={modal.item.parentId} onClose={closeModal} />
           ) : modal.action === "add" ? (
             <AddPinMembers item={modal.item} onClose={closeModal} />
           ) : (

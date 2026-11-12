@@ -1,0 +1,105 @@
+@layer components {
+  .gantt-scroll {
+    --name-width: clamp(180px, 18cqw, 260px);
+    @apply relative isolate px-0;
+  }
+  .gantt-sheet {
+    @apply relative;
+    min-width: calc(var(--name-width) + var(--ruler-min));
+  }
+  .gantt-heading,
+  .gantt-row {
+    @apply grid;
+    grid-template-columns: var(--name-width) minmax(0, 1fr);
+  }
+  .gantt-heading {
+    @apply sticky top-0 z-20 border-y border-neutral-200 bg-white;
+  }
+  .gantt-row {
+    @apply relative min-h-14 border-b border-neutral-200;
+  }
+  .gantt-name {
+    @apply sticky left-0 z-10 min-w-0 border-r border-neutral-200 bg-white px-4 py-2.5 text-left;
+  }
+  button.gantt-name {
+    @apply hover:bg-neutral-50 focus-visible:-outline-offset-2;
+  }
+  .gantt-ruler,
+  .gantt-guides {
+    @apply grid;
+    grid-template-columns: var(--ticks);
+  }
+  .gantt-ruler > span {
+    @apply flex min-h-12 flex-col items-center justify-center border-r border-neutral-200 text-xs leading-tight tabular-nums;
+  }
+  .gantt-ruler small {
+    @apply mb-0.5 text-[10px] uppercase text-neutral-500;
+  }
+  .gantt-ruler [aria-current="date"] {
+    @apply bg-violet-50 font-semibold text-brand;
+  }
+  .gantt-guides {
+    @apply pointer-events-none absolute inset-y-0 right-0;
+    left: var(--name-width);
+  }
+  .gantt-guides > span {
+    @apply border-r border-neutral-100;
+  }
+  .gantt-today {
+    @apply absolute inset-y-0 border-l border-brand/55;
+  }
+  .gantt-track {
+    @apply relative min-w-0 overflow-clip;
+  }
+  .gantt-bar,
+  .gantt-marker {
+    @apply absolute top-1/2 flex h-7 -translate-y-1/2 items-center justify-center;
+  }
+  .gantt-bar {
+    @apply min-w-[2px] overflow-hidden rounded-md bg-[#76bfeb] text-xs font-medium text-[#123951] hover:bg-[#96d3f7];
+    container-type: inline-size;
+  }
+  .gantt-bar[data-before] {
+    @apply rounded-l-none border-l-2 border-dashed border-sky-700;
+  }
+  .gantt-bar[data-after] {
+    @apply rounded-r-none border-r-2 border-dashed border-sky-700;
+  }
+  .gantt-bar-label {
+    @apply hidden truncate px-2;
+  }
+  @container (min-width: 70px) {
+    .gantt-bar-label {
+      @apply block;
+    }
+  }
+  .gantt-marker {
+    @apply w-6 -translate-x-1/2 rounded;
+  }
+  .gantt-marker > span {
+    @apply size-3 rotate-45 rounded-[2px] bg-[#4696be];
+  }
+  .gantt-marker:where(:hover) > span {
+    @apply bg-sky-700;
+  }
+  .gantt-key {
+    @apply sticky left-0 mt-4 flex items-center gap-5 text-xs text-neutral-500;
+  }
+  .gantt-key > span {
+    @apply inline-flex items-center gap-2;
+  }
+  .gantt-empty {
+    @apply sticky left-0 px-4 py-10 text-center;
+  }
+  @media (max-width: 760px) {
+    .gantt-scroll {
+      --name-width: clamp(106px, 34vw, 164px);
+    }
+    .gantt-name {
+      @apply px-2;
+    }
+    .gantt-key {
+      @apply gap-3;
+    }
+  }
+}

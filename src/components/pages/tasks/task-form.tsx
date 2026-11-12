@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Modal } from "@/components/common/modal";
+import type { DemoMember } from "@/lib/members";
 import {
   newTaskFields,
   priorities,
@@ -12,12 +13,50 @@ import { useTaskStore } from "@/stores/task-store";
 
 type TaskFormProps = {
   sectionId: string;
+  members: readonly DemoMember[];
   status: TaskStatus;
   task?: Task;
   onClose: () => void;
 };
 
-export function TaskForm({ sectionId, status, task, onClose }: TaskFormProps) {
+function TaskMemberSelect({
+  name,
+  members,
+  value,
+  onChange,
+}: {
+  name: "assignedTo" | "assignedBy";
+  members: readonly DemoMember[];
+  value: string;
+  onChange: (name: "assignedTo" | "assignedBy", value: string) => void;
+}) {
+  const normalized = value.trim().toLowerCase();
+  const match = members.find((member) => member.name.toLowerCase() === normalized);
+  return (
+    <label className="task-field max-[420px]:col-span-2">
+      {name === "assignedTo" ? "Assigned to" : "Assigned by"}
+      <select
+        name={name}
+        value={match?.name ?? value}
+        onChange={(event) => onChange(name, event.target.value)}
+      >
+        <option value="">{members.length ? "None" : "No workspace members"}</option>
+        {value && !match && (
+          <option value={value} disabled>
+            {value} (unavailable)
+          </option>
+        )}
+        {members.map((member) => (
+          <option key={member.id} value={member.name}>
+            {member.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+export function TaskForm({ sectionId, members, status, task, onClose }: TaskFormProps) {
   const [fields, setFields] = useState<TaskFields>(() => task ?? newTaskFields(status));
   const [error, setError] = useState("");
   const save = useTaskStore((state) => state.save);
@@ -35,7 +74,11 @@ export function TaskForm({ sectionId, status, task, onClose }: TaskFormProps) {
     }
   }
   return (
-    <Modal title={task ? "Edit task" : "Add task"} onClose={onClose}>
+    <Modal
+      title={task ? "Edit task" : "Create task"}
+      className="workspace-dialog"
+      onClose={onClose}
+    >
       <form className="grid grid-cols-2 gap-4" onSubmit={submit}>
         <label className="task-field col-span-2">
           Task title
@@ -47,7 +90,7 @@ export function TaskForm({ sectionId, status, task, onClose }: TaskFormProps) {
             onChange={(e) => update("title", e.target.value)}
           />
         </label>
-        <label className="task-field">
+        <label className="task-field max-[420px]:col-span-2">
           Date
           <input
             name="date"
@@ -56,7 +99,7 @@ export function TaskForm({ sectionId, status, task, onClose }: TaskFormProps) {
             onChange={(e) => update("date", e.target.value)}
           />
         </label>
-        <label className="task-field">
+        <label className="task-field max-[420px]:col-span-2">
           Deadline
           <input
             name="deadline"
@@ -66,24 +109,18 @@ export function TaskForm({ sectionId, status, task, onClose }: TaskFormProps) {
             onChange={(e) => update("deadline", e.target.value)}
           />
         </label>
-        <label className="task-field">
-          Assigned to
-          <input
-            name="assignedTo"
-            maxLength={80}
-            value={fields.assignedTo}
-            onChange={(e) => update("assignedTo", e.target.value)}
-          />
-        </label>
-        <label className="task-field">
-          Assigned by
-          <input
-            name="assignedBy"
-            maxLength={80}
-            value={fields.assignedBy}
-            onChange={(e) => update("assignedBy", e.target.value)}
-          />
-        </label>
+        <TaskMemberSelect
+          name="assignedTo"
+          members={members}
+          value={fields.assignedTo}
+          onChange={update}
+        />
+        <TaskMemberSelect
+          name="assignedBy"
+          members={members}
+          value={fields.assignedBy}
+          onChange={update}
+        />
         <label className="task-field">
           Priority
           <select
@@ -114,11 +151,11 @@ export function TaskForm({ sectionId, status, task, onClose }: TaskFormProps) {
             {error}
           </p>
         )}
-        <footer className="col-span-2 mt-2 flex justify-end gap-2.5 border-t border-neutral-100 pt-4">
+        <footer className="col-span-2 mt-1 flex justify-end gap-2 border-t border-neutral-200 pt-4">
           <button type="button" className="secondary-button" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="primary-button">
+          <button type="submit" className="primary-button" disabled={!fields.title.trim()}>
             {task ? "Save changes" : "Create task"}
           </button>
         </footer>

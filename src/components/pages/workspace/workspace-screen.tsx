@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Breadcrumbs, type Crumb } from "@/components/layout/breadcrumbs";
 import { Sidebar } from "@/components/layout/sidebar";
 import { WorkspaceUtilities } from "@/components/layout/workspace-utilities";
+import { TaskAnalytics } from "@/components/pages/analytics/task-analytics";
+import { TaskDashboard } from "@/components/pages/dashboard/task-dashboard";
+import { TaskSchedule } from "@/components/pages/schedule/task-schedule";
+import { MemberTasks } from "@/components/pages/tasks/member-tasks";
 import { TaskBoard } from "@/components/pages/tasks/task-board";
 import { Icon } from "@/components/ui/icon";
 import { useBoardRoute } from "@/hooks/use-board-route";
+import { memberTasksHref, resolveNodeRoute } from "@/lib/board-route";
+import { demoMembers, previewMember } from "@/lib/members";
 import { sections } from "@/lib/navigation";
-import { boardLevels, resolveBoardPath } from "@/lib/workspaces";
+import { indexBoardItems, isTaskBoard } from "@/lib/workspaces";
 import { listenToBoardStorage, useBoardStore } from "@/stores/board-store";
 import { BoardCanvas } from "./board-canvas";
 import { BoardMemberFilter } from "./board-member-filter";
@@ -20,7 +26,7 @@ export function WorkspaceScreen() {
   const ready = useBoardStore((s) => s.ready);
   const route = useBoardRoute();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [form, setForm] = useState<{ parentId: string | null; noun: string } | null>(null);
+  const [form, setForm] = useState<{ parentId: string | null } | null>(null);
   useEffect(listenToBoardStorage, []);
   useEffect(() => {
     const closeOverlays = () => {
@@ -38,16 +44,27 @@ export function WorkspaceScreen() {
     };
   }, []);
 
-  const path = resolveBoardPath(route.ids, items);
+  const tree = useMemo(() => indexBoardItems(items), [items]);
+  const path = resolveNodeRoute(route, tree.byId);
   const current = path.at(-1);
   const parentId = current?.item.id ?? null;
-  const currentSection = sections.find((s) => s.id === route.section);
+  const boardHref = current?.href ?? "#/";
+  const memberId = route.kind === "home" || route.kind === "node" ? route.tasksFor : undefined;
+  const taskMember = demoMembers.find((member) => member.id === memberId);
+  const currentSection =
+    route.kind === "tool" ? sections.find((s) => s.id === route.name) : undefined;
   const invalidRoute =
-    route.invalid || path.length !== route.ids.length || (route.section && !currentSection);
+    route.kind === "invalid" ||
+    (memberId !== undefined && !taskMember) ||
+    (route.kind === "tool" && !currentSection) ||
+    (route.kind === "node" && !current);
+  const showTasks = current && isTaskBoard(current.item, path.length);
   const crumbs: Crumb[] = currentSection
     ? [{ title: currentSection.label, href: `#/tool/${currentSection.id}` }]
     : [{ title: "Board", href: "#/" }];
   for (const step of path) crumbs.push({ title: step.item.title, href: step.href });
+  if (taskMember)
+    crumbs.push({ title: taskMember.name, href: memberTasksHref(boardHref, taskMember.id) });
 
   return (
     <div className="workspace-shell">
@@ -64,7 +81,15 @@ export function WorkspaceScreen() {
         onClose={() => setSidebarOpen(false)}
       />
       <main id="board-main" tabIndex={-1} className="board-main">
-        {currentSection || invalidRoute ? (
+        {currentSection?.id === "tasks" ? (
+          <MemberTasks member={previewMember} byId={tree.byId} />
+        ) : currentSection?.id === "calendar" || currentSection?.id === "gantt" ? (
+          <TaskSchedule key={currentSection.id} tool={currentSection.id} byId={tree.byId} />
+        ) : currentSection?.id === "dashboard" ? (
+          <TaskDashboard />
+        ) : currentSection?.id === "analytics" ? (
+          <TaskAnalytics />
+        ) : currentSection || invalidRoute ? (
           <div className="tool-view">
             {ready && (
               <div>
@@ -76,7 +101,9 @@ export function WorkspaceScreen() {
                     ? "No members have been added."
                     : currentSection
                       ? "This tool is not connected to the local workspace."
-                      : "This pin is unavailable in this browser."}
+                      : memberId && !taskMember
+                        ? "This member is unavailable."
+                        : "This pin is unavailable in this browser."}
                 </p>
                 <a
                   className="mt-5 inline-block text-sm font-medium text-brand hover:underline"
@@ -88,14 +115,30 @@ export function WorkspaceScreen() {
             )}
           </div>
         ) : (
-          <BoardSurface boardId={parentId ?? "root"}>
-            {current && path.length === boardLevels.length ? (
+          <BoardSurface
+            boardId={
+              taskMember
+                ? `member:${taskMember.id}`
+                : showTasks
+                  ? `tasks:${parentId}`
+                  : (parentId ?? "root")
+            }
+          >
+            {taskMember ? (
+              <MemberTasks
+                key={taskMember.id}
+                member={taskMember}
+                byId={tree.byId}
+                boardHref={boardHref}
+              />
+            ) : current && showTasks ? (
               <TaskBoard key={current.item.id} path={path} sectionId={current.item.id} />
             ) : (
               <BoardCanvas
+                key={parentId ?? "root"}
                 path={path}
-                items={items.filter((item) => item.parentId === parentId)}
-                onAdd={() => setForm({ parentId, noun: boardLevels[path.length].label })}
+                items={tree.children.get(parentId) ?? []}
+                onAdd={() => setForm({ parentId })}
               />
             )}
           </BoardSurface>
@@ -115,7 +158,9 @@ export function WorkspaceScreen() {
         </div>
       </main>
       <WorkspaceUtilities />
-      {!currentSection && !invalidRoute && <BoardMemberFilter />}
+      {!currentSection && !invalidRoute && !taskMember && (
+        <BoardMemberFilter boardHref={boardHref} />
+      )}
       {form && <PinForm {...form} onClose={() => setForm(null)} />}
     </div>
   );

@@ -19,7 +19,7 @@ export function WorkspaceBranch({
       data-endpoint={endpoint}
       data-has-ancestors={path.length > 1 || undefined}
     >
-      {endpoint !== "tasks" && <span className="branch-connector" aria-hidden="true" />}
+      <span className="branch-connector" aria-hidden="true" />
       <div className="branch-position">
         <BoardPin
           item={current.item}

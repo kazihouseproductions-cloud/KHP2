@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import { ShellIcon } from "@/components/ui/shell-icon";
+import { previewMember } from "@/lib/members";
 import { sections } from "@/lib/navigation";
 
 type Panel = "Account" | "Notifications" | "Apps" | "Chat";
@@ -55,7 +56,7 @@ export function WorkspaceUtilities() {
       <div className="account-pill">
         <button type="button" className="account-name" {...props("Account")}>
           <ShellIcon name="account" size={30} />
-          <span>Username</span>
+          <span>{previewMember.name}</span>
         </button>
         <button type="button" className="icon-action" {...props("Chat")}>
           <ShellIcon name="chat" size={27} />

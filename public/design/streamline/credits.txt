@@ -1,0 +1,9 @@
+Streamline Core icons by Streamline
+https://www.streamlinehq.com/
+
+Creative Commons Attribution 4.0 International
+https://creativecommons.org/licenses/by/4.0/
+
+The icons were extracted from the Vector Icons frame in the supplied Figma
+community file, converted to monochrome SVG symbols, and grouped into sheets.
+https://www.figma.com/design/25xsyX1aMLpGta1H21XAzj/?node-id=1545-3221

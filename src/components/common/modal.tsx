@@ -1,17 +1,19 @@
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useLayoutEffect, useRef } from "react";
 import { Icon } from "@/components/ui/icon";
 
 export function Modal({
   title,
   onClose,
   children,
+  className = "",
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = ref.current;
     dialog?.showModal();
     dialog?.querySelector<HTMLInputElement>("input")?.focus();
@@ -22,10 +24,12 @@ export function Modal({
     <dialog
       ref={ref}
       aria-label={title}
-      className="form-dialog"
+      className={`form-dialog ${className}`}
       onCancel={onClose}
       onPointerDown={(event) => {
         if (event.target !== event.currentTarget) return;
+        // Let an open popover handle the first backdrop press.
+        if (event.currentTarget.querySelector(":popover-open")) return;
         const rect = event.currentTarget.getBoundingClientRect();
         if (
           event.clientX < rect.left ||

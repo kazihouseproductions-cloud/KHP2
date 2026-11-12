@@ -1,29 +1,33 @@
 import { create } from "zustand";
+import { boardItemPrefix, readBoardItem } from "@/lib/board-records";
 import { readRecords, watchRecords } from "@/lib/local-records";
-import { defaultMemberIds, demoMembers, getPinMemberIds } from "@/lib/members";
+import { getAssignableMembers, getPinMemberIds } from "@/lib/members";
+import { taskChange, taskPrefix, withTaskHistory } from "@/lib/task-history";
 import { isTask } from "@/lib/tasks";
 import {
   type BoardItem,
   collectPinIds,
+  defaultPinColor,
+  getPinAncestry,
   isBoardItem,
-  pinIcons,
+  isPinColor,
+  isTaskBoard,
+  isWorkspaceIconId,
   type WorkspaceIconId,
 } from "@/lib/workspaces";
 import { useTaskStore } from "@/stores/task-store";
 
-const prefix = "khp.board.v1.item.";
-const taskPrefix = "khp.board.v1.task.";
-
-function readItem(id: string) {
-  const value: unknown = JSON.parse(localStorage.getItem(prefix + id) ?? "null");
-  if (!isBoardItem(value) || value.id !== id) throw new Error("This pin is no longer available.");
-  return value;
+// Adding a child and ending its parent must make the leaf decision under the same lock.
+function changeBranch<T>(id: string, change: () => T): Promise<T> {
+  return navigator.locks.request(boardItemPrefix + id, change);
 }
 
 function assertUnchanged(original: BoardItem, current: BoardItem) {
   if (
     original.title !== current.title ||
     original.icon !== current.icon ||
+    original.color !== current.color ||
+    original.boardType !== current.boardType ||
     original.parentId !== current.parentId
   )
     throw new Error(
@@ -31,10 +35,11 @@ function assertUnchanged(original: BoardItem, current: BoardItem) {
     );
 }
 
-function validatedTitle(rawTitle: string, icon: WorkspaceIconId) {
+function validatePin(rawTitle: string, icon: WorkspaceIconId, color?: string) {
   const title = rawTitle.trim();
   if (!title || title.length > 60) throw new Error("Enter a title between 1 and 60 characters.");
-  if (!pinIcons.some((option) => option.id === icon)) throw new Error("Choose a valid pin icon.");
+  if (!isWorkspaceIconId(icon)) throw new Error("Choose a valid pin icon.");
+  if (color !== undefined && !isPinColor(color)) throw new Error("Choose a valid pin color.");
   return title;
 }
 
@@ -42,8 +47,14 @@ type BoardStore = {
   items: BoardItem[];
   ready: boolean;
   load: () => void;
-  add: (title: string, icon: WorkspaceIconId, parentId: string | null) => void;
-  update: (original: BoardItem, title: string, icon: WorkspaceIconId) => void;
+  add: (
+    title: string,
+    icon: WorkspaceIconId,
+    parentId: string | null,
+    color?: string,
+  ) => Promise<BoardItem>;
+  endBranch: (id: string) => Promise<void>;
+  update: (original: BoardItem, title: string, icon: WorkspaceIconId, color?: string) => void;
   addMembers: (id: string, memberIds: string[]) => void;
   remove: (original: BoardItem, confirmation: string) => void;
 };
@@ -51,7 +62,7 @@ type BoardStore = {
 export const useBoardStore = create<BoardStore>((set, get) => {
   function persist(item: BoardItem) {
     try {
-      localStorage.setItem(prefix + item.id, JSON.stringify(item));
+      localStorage.setItem(boardItemPrefix + item.id, JSON.stringify(item));
     } catch {
       throw new Error("Your browser could not save this pin. Allow local storage and try again.");
     }
@@ -66,48 +77,77 @@ export const useBoardStore = create<BoardStore>((set, get) => {
     ready: false,
     load: () => {
       try {
-        set({ items: readRecords(prefix, isBoardItem), ready: true });
+        set({ items: readRecords(boardItemPrefix, isBoardItem), ready: true });
       } catch {
         set({ ready: true });
       }
     },
-    add: (rawTitle, icon, parentId) => {
-      const title = validatedTitle(rawTitle, icon);
+    async add(rawTitle, icon, parentId, color = defaultPinColor) {
+      const title = validatePin(rawTitle, icon, color);
       const item: BoardItem = {
         id: crypto.randomUUID(),
         title,
         icon,
+        color,
         parentId,
         createdAt: Date.now(),
-        memberIds: [...defaultMemberIds],
+        memberIds: [],
+        boardType: "sections",
       };
-      persist(item);
+      if (parentId === null) {
+        persist(item);
+        return item;
+      }
+      return changeBranch(parentId, () => {
+        const parent = readBoardItem(parentId);
+        const path = getPinAncestry(parent, readBoardItem);
+        if (!path.length || isTaskBoard(parent, path.length))
+          throw new Error("This board cannot contain another section.");
+        persist(item);
+        return item;
+      });
     },
-    update(original, rawTitle, icon) {
-      const title = validatedTitle(rawTitle, icon);
-      const current = readItem(original.id);
+    endBranch(id) {
+      return changeBranch(id, () => {
+        const item = readBoardItem(id);
+        const path = getPinAncestry(item, readBoardItem);
+        if (!path.length) throw new Error("This section is no longer available.");
+        if (isTaskBoard(item, path.length)) return;
+        if (readRecords(boardItemPrefix, isBoardItem).some((child) => child.parentId === id))
+          throw new Error(
+            "This branch already has sections. Open a section at the end of the branch.",
+          );
+        persist({ ...item, boardType: "tasks" });
+      });
+    },
+    update(original, rawTitle, icon, color = original.color) {
+      const title = validatePin(rawTitle, icon, color);
+      const current = readBoardItem(original.id);
       assertUnchanged(original, current);
-      persist({ ...current, title, icon });
+      persist({ ...current, title, icon, color });
     },
     addMembers(id, memberIds) {
-      if (memberIds.some((memberId) => !demoMembers.some((member) => member.id === memberId)))
-        throw new Error("Choose members from the sample roster.");
-      const current = readItem(id);
+      const current = readBoardItem(id);
+      const roster = getAssignableMembers(current, readBoardItem);
+      if (memberIds.some((id) => !roster.some((member) => member.id === id)))
+        throw new Error("Choose members from the available roster.");
       persist({ ...current, memberIds: [...new Set([...getPinMemberIds(current), ...memberIds])] });
     },
     remove(original, confirmation) {
       if (confirmation !== "DELETE") throw new Error("Type DELETE exactly to delete this pin.");
-      assertUnchanged(original, readItem(original.id));
-      const items = readRecords(prefix, isBoardItem);
+      assertUnchanged(original, readBoardItem(original.id));
+      const items = readRecords(boardItemPrefix, isBoardItem);
       const ids = collectPinIds(items, original.id);
       const tasks = readRecords(taskPrefix, isTask).filter((task) => ids.has(task.sectionId));
       const keys = [
-        ...items.filter((item) => ids.has(item.id)).map((item) => prefix + item.id),
+        ...items.filter((item) => ids.has(item.id)).map((item) => boardItemPrefix + item.id),
         ...tasks.map((task) => taskPrefix + task.id),
       ];
       const snapshots = keys.map((key) => [key, localStorage.getItem(key)] as const);
       try {
-        for (const key of keys) localStorage.removeItem(key);
+        withTaskHistory(taskChange(tasks, []), () => {
+          for (const key of keys) localStorage.removeItem(key);
+        });
       } catch {
         try {
           for (const [key, value] of snapshots) {
@@ -131,5 +171,5 @@ export const useBoardStore = create<BoardStore>((set, get) => {
 });
 
 export function listenToBoardStorage() {
-  return watchRecords(prefix, useBoardStore.getState().load);
+  return watchRecords(boardItemPrefix, useBoardStore.getState().load);
 }

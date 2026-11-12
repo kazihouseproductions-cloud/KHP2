@@ -1,8 +1,10 @@
 import { create } from "zustand";
+import { readBoardItem } from "@/lib/board-records";
 import { readRecords, watchRecords } from "@/lib/local-records";
+import { getWorkspaceMembers } from "@/lib/members";
+import { taskChange, taskPrefix as prefix, withTaskHistory } from "@/lib/task-history";
 import { isTask, type Task, type TaskFields, type TaskStatus } from "@/lib/tasks";
-
-const prefix = "khp.board.v1.task.";
+import { getPinAncestry, isTaskBoard } from "@/lib/workspaces";
 
 function readTask(id: string): Task {
   const stored: unknown = JSON.parse(localStorage.getItem(prefix + id) ?? "null");
@@ -18,9 +20,12 @@ type TaskStore = {
 };
 
 export const useTaskStore = create<TaskStore>((set) => {
-  function persist(task: Task) {
+  function persist(task: Task, previous?: Task) {
     try {
-      localStorage.setItem(prefix + task.id, JSON.stringify(task));
+      const approvals = Number(task.status === "Approved" && previous?.status !== "Approved");
+      withTaskHistory(taskChange(previous ? [previous] : [], [task], approvals), () =>
+        localStorage.setItem(prefix + task.id, JSON.stringify(task)),
+      );
     } catch {
       throw new Error("Your browser could not save the task. Allow local storage and try again.");
     }
@@ -50,19 +55,36 @@ export const useTaskStore = create<TaskStore>((set) => {
         throw new Error(
           "This task changed in another tab. Close and reopen it to edit the latest version.",
         );
-      persist({
-        ...fields,
-        title,
-        assignedTo: fields.assignedTo.trim(),
-        assignedBy: fields.assignedBy.trim(),
-        sectionId,
-        id: original?.id ?? crypto.randomUUID(),
-        createdAt: original?.createdAt ?? Date.now(),
-      });
+      const section = readBoardItem(sectionId);
+      const path = getPinAncestry(section, readBoardItem);
+      if (!path.length || !isTaskBoard(section, path.length))
+        throw new Error("End this branch before creating tasks here.");
+      const members = getWorkspaceMembers(path[0]);
+      for (const field of ["assignedTo", "assignedBy"] as const) {
+        const name = fields[field].trim();
+        if (!name || (original?.sectionId === sectionId && name === original[field].trim()))
+          continue;
+        if (!members.some((member) => member.name === name)) {
+          const label = field === "assignedTo" ? "Assigned to" : "Assigned by";
+          throw new Error(`Choose a current workspace member for “${label}” or clear the field.`);
+        }
+      }
+      persist(
+        {
+          ...fields,
+          title,
+          assignedTo: fields.assignedTo.trim(),
+          assignedBy: fields.assignedBy.trim(),
+          sectionId,
+          id: original?.id ?? crypto.randomUUID(),
+          createdAt: original?.createdAt ?? Date.now(),
+        },
+        original,
+      );
     },
     move(id, status) {
       const task = readTask(id);
-      if (task.status !== status) persist({ ...task, status });
+      if (task.status !== status) persist({ ...task, status }, task);
     },
   };
 });

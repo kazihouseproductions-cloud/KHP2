@@ -1,5 +1,6 @@
-import type { CSSProperties } from "react";
-import { boardLevels, childHref, type BoardItem, type BoardStep } from "@/lib/workspaces";
+import { type CSSProperties, useState } from "react";
+import { nodeHref, type BoardItem, type BoardStep } from "@/lib/workspaces";
+import { useBoardStore } from "@/stores/board-store";
 import { AddPin, BoardPin } from "./board-pin";
 import { WorkspaceBranch } from "./workspace-branch";
 
@@ -40,20 +41,55 @@ export function BoardCanvas({
   onAdd: () => void;
 }) {
   const current = path.at(-1);
+  const endBranch = useBoardStore((state) => state.endBranch);
+  const [ending, setEnding] = useState(false);
+  const [error, setError] = useState("");
+  async function openTaskBoard() {
+    if (!current || ending) return;
+    setEnding(true);
+    try {
+      await endBranch(current.item.id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to open the task board.");
+      setEnding(false);
+    }
+  }
   const extraPairs = Math.max(0, Math.ceil((items.length - 8) / 2));
   return (
     <div className="board-origin" style={{ "--extra-pairs": extraPairs } as CSSProperties}>
       <div className="board-hub">
-        <h1 className="board-title">{current?.item.title ?? "Workspace"}</h1>
+        <h1 className="board-title" style={{ color: current?.item.color }}>
+          {current?.item.title ?? "Workspace"}
+        </h1>
         <WorkspaceBranch path={path} endpoint={items.length < 3 ? "title" : "ring"} />
       </div>
       {items.map((item, index) => (
         <div key={item.id} className="pin-position" style={orbitPosition(index, items.length)}>
-          <BoardPin item={item} href={childHref(current?.href ?? "#/", path.length, item.id)} />
+          <BoardPin item={item} href={nodeHref(item)} />
         </div>
       ))}
       <div className={`pin-position ${items.length ? "add-position" : "empty-add-position"}`}>
-        <AddPin label={`Add ${boardLevels[path.length].label}`} onClick={onAdd} />
+        <div className="flex w-max items-center gap-3">
+          <AddPin label={current ? "Add Section" : "Add Workspace"} onClick={onAdd} />
+          {current && items.length === 0 && (
+            <>
+              <span className="text-xs text-neutral-500">or</span>
+              <button
+                className="end-branch-button"
+                type="button"
+                disabled={ending}
+                onClick={openTaskBoard}
+              >
+                End the tree here and create tasks
+              </button>
+            </>
+          )}
+        </div>
+        {error && (
+          <p role="alert" className="mt-2 max-w-64 text-sm text-red-700">
+            {error}
+          </p>
+        )}
       </div>
     </div>
   );

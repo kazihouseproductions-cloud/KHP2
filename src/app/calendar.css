@@ -1,0 +1,152 @@
+@layer components {
+  .task-tool {
+    @apply absolute inset-0 flex min-h-0 flex-col bg-white;
+    padding: clamp(106px, 18.8vh, 177px) clamp(22px, 2.1vw, 40px) 0 clamp(24px, 2.7vw, 52px);
+  }
+  .calendar-toolbar,
+  .calendar-navigation {
+    @apply flex flex-wrap items-center gap-x-5 gap-y-3;
+  }
+  .calendar-toolbar {
+    @apply justify-between;
+  }
+  .calendar-navigation {
+    @apply ml-auto justify-end text-neutral-700;
+  }
+  .calendar-mode {
+    @apply min-h-8 rounded-full bg-white px-6 text-sm font-medium tracking-wide shadow-[0_3px_4px_#0004] hover:bg-neutral-50;
+    min-width: clamp(76px, 5.6vw, 108px);
+  }
+  .calendar-mode[aria-pressed="true"] {
+    @apply bg-brand text-white;
+  }
+  .calendar-step {
+    @apply h-8 rounded-sm bg-[#929292] text-lg leading-none text-white hover:bg-neutral-600;
+    width: clamp(38px, 3.6vw, 70px);
+  }
+  .calendar-step:first-child {
+    @apply rounded-l-full;
+  }
+  .calendar-step:last-child {
+    @apply rounded-r-full;
+  }
+  .calendar-unscheduled {
+    @apply rounded-full px-2 py-1 text-xs text-neutral-600 underline decoration-neutral-300 underline-offset-4 hover:text-black;
+  }
+  .calendar-scroll {
+    @apply min-h-0 flex-1 overflow-auto px-1 pb-24;
+    margin: clamp(22px, 6.5vh, 61px) clamp(0px, 2.9vw, 56px) 0 clamp(0px, 1vw, 19px);
+  }
+  .calendar-grid {
+    @apply grid grid-cols-7;
+  }
+  .calendar-weekday {
+    @apply pb-2 text-center text-sm font-light uppercase text-neutral-700;
+  }
+  .calendar-cell {
+    @apply flex min-w-0 flex-col justify-between gap-1 border-neutral-300 p-[5px];
+    min-height: clamp(76px, 9.6vh, 90px);
+  }
+  .calendar-cell:not(:nth-child(7n)) {
+    @apply border-r;
+  }
+  .calendar-cell:nth-child(n + 15) {
+    @apply border-t;
+  }
+  .calendar-cell-footer {
+    @apply mt-auto flex items-end justify-end gap-1;
+  }
+  .calendar-date {
+    @apply rounded px-0.5 text-[clamp(22px,1.7vw,32px)] leading-none font-extralight tabular-nums hover:bg-neutral-100;
+  }
+  .calendar-date[aria-current="date"],
+  .calendar-mini-date[aria-current="date"] {
+    @apply font-medium text-brand;
+  }
+  .calendar-more {
+    @apply mr-auto min-h-6 rounded px-1 text-xs text-neutral-600 hover:bg-neutral-100;
+  }
+  .calendar-task {
+    @apply flex min-h-6 w-full min-w-0 items-center justify-between gap-1 rounded-[5px] bg-[#76bfeb] px-2 text-left text-xs leading-tight font-medium text-[#123951] hover:bg-[#96d3f7];
+  }
+  .calendar-task .member-avatar,
+  .calendar-dot {
+    @apply size-3.5 shrink-0 rounded-full text-[7px];
+  }
+  .calendar-dot {
+    @apply bg-[#e4ebf1];
+  }
+  .calendar-week .calendar-cell {
+    @apply min-h-56;
+  }
+  .calendar-mobile-weekday {
+    @apply hidden;
+  }
+  .calendar-year {
+    @apply grid gap-x-10 gap-y-6;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  }
+  .calendar-mini-date {
+    @apply relative py-1;
+  }
+  .calendar-mini-date.has-tasks {
+    @apply rounded bg-sky-100 font-semibold text-sky-900 hover:bg-sky-200;
+  }
+  @media (max-width: 760px) {
+    .task-tool {
+      padding: 76px 12px 0;
+    }
+    .calendar-toolbar {
+      @apply gap-y-4;
+    }
+    .calendar-mode {
+      @apply min-w-[78px] px-3;
+    }
+    .calendar-navigation {
+      @apply w-full gap-x-3;
+    }
+    .calendar-unscheduled {
+      @apply mr-auto px-0;
+    }
+    .calendar-scroll {
+      @apply mx-0 mt-6 px-0;
+    }
+    .calendar-cell {
+      @apply p-0.5;
+    }
+    .calendar-more {
+      @apply px-0.5 text-[10px];
+    }
+    .calendar-weekday {
+      @apply text-[10px];
+    }
+    .calendar-grid:not(.calendar-week) .calendar-task {
+      @apply px-1 text-[10px];
+    }
+    .calendar-grid:not(.calendar-week) .calendar-task :is(.member-avatar, .calendar-dot) {
+      @apply hidden;
+    }
+    .calendar-week {
+      @apply block;
+    }
+    .calendar-week .calendar-weekday {
+      @apply hidden;
+    }
+    .calendar-week .calendar-cell {
+      @apply flex-row-reverse items-start justify-end gap-3 border-0 border-b py-3;
+      min-height: 60px;
+    }
+    .calendar-week .calendar-cell > div:first-child {
+      @apply min-w-0 flex-1;
+    }
+    .calendar-week .calendar-cell-footer {
+      @apply m-0;
+    }
+    .calendar-week .calendar-date {
+      @apply flex w-12 flex-col items-center gap-1;
+    }
+    .calendar-week .calendar-mobile-weekday {
+      @apply block text-[10px] font-medium uppercase text-neutral-500;
+    }
+  }
+}

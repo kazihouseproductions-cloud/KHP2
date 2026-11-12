@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Modal } from "@/components/common/modal";
 import { Icon } from "@/components/ui/icon";
 import { useBoardRoute } from "@/hooks/use-board-route";
-import { type BoardItem, collectPinIds, resolveBoardPath } from "@/lib/workspaces";
+import { resolveNodeRoute } from "@/lib/board-route";
+import { type BoardItem, collectPinIds, indexBoardItems } from "@/lib/workspaces";
 import { useBoardStore } from "@/stores/board-store";
 
 export function DeletePinDialog({ item, onClose }: { item: BoardItem; onClose: () => void }) {
@@ -17,7 +18,7 @@ export function DeletePinDialog({ item, onClose }: { item: BoardItem; onClose: (
   const remove = useBoardStore((state) => state.remove);
   const route = useBoardRoute();
   const nested = collectPinIds(items, item.id).size - 1;
-  const parentHref = resolveBoardPath(route.ids, items).find(
+  const parentHref = resolveNodeRoute(route, indexBoardItems(items).byId).find(
     (step) => step.item.id === item.id,
   )?.parentHref;
 
