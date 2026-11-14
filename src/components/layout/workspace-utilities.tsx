@@ -110,10 +110,6 @@ export function WorkspaceUtilities({
         account={member}
         members={search.members}
         inboxOpen={panel === "Chat"}
-        showInbox={() => {
-          trigger.current = chatTrigger.current;
-          setPanel("Chat");
-        }}
         hideInbox={() => setPanel(null)}
         focusTrigger={() => chatTrigger.current?.focus()}
       />

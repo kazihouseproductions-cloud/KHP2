@@ -1,11 +1,29 @@
 import type { Member } from "./members";
 
+export type ChatAttachment = { id: string; name: string; size: number; kind: "file" | "voice" };
+export type DraftAttachment = { attachment: ChatAttachment; blob: Blob };
+export type ChatDraft = { text: string; files: DraftAttachment[] };
+export const emptyChatDraft: ChatDraft = { text: "", files: [] };
+
+export function prepareAttachment(
+  file: File,
+  kind: ChatAttachment["kind"] = "file",
+): DraftAttachment {
+  return {
+    attachment: { id: crypto.randomUUID(), name: file.name, size: file.size, kind },
+    blob: file,
+  };
+}
+
+export type ChatGroup = { id: string; name: string; memberIds: string[]; createdAt: number };
+
 export type ChatMessage = {
   id: string;
   contactId: string;
   outgoing: boolean;
   body: string;
   createdAt: number;
+  attachments?: ChatAttachment[];
 };
 
 function sample(contactId: string, time: string, outgoing: boolean, body: string): ChatMessage {
@@ -92,7 +110,29 @@ export function isChatMessage(value: unknown): value is ChatMessage {
   );
 }
 
-export function chatThreads(members: readonly Member[], messages: readonly ChatMessage[]) {
+export type ChatThread = {
+  id: string;
+  name: string;
+  member?: Member;
+  group?: ChatGroup;
+  description: string;
+  history: ChatMessage[];
+  latest?: ChatMessage;
+  updatedAt: number;
+};
+
+export function messagePreview(message: ChatMessage) {
+  if (message.body) return message.body;
+  const attachments = message.attachments ?? [];
+  if (attachments.length > 1) return `${attachments.length} attachments`;
+  return attachments[0]?.kind === "voice" ? "Voice message" : (attachments[0]?.name ?? "");
+}
+
+export function chatThreads(
+  members: readonly Member[],
+  messages: readonly ChatMessage[],
+  groups: readonly ChatGroup[],
+) {
   const histories = new Map<string, ChatMessage[]>();
   const sorted = [...messages].sort(
     (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
@@ -102,19 +142,30 @@ export function chatThreads(members: readonly Member[], messages: readonly ChatM
     if (history) history.push(message);
     else histories.set(message.contactId, [message]);
   }
-  return members
-    .map((member) => {
-      const history = histories.get(member.id) ?? [];
-      return { member, history, latest: history.at(-1) };
+  const contacts = [
+    ...members.map((member) => ({
+      id: member.id,
+      name: member.name,
+      member,
+      description: member.jobTitle || member.role,
+      createdAt: 0,
+    })),
+    ...groups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      group,
+      description: `${group.memberIds.length} members`,
+      createdAt: group.createdAt,
+    })),
+  ];
+  return contacts
+    .map((contact): ChatThread => {
+      const history = histories.get(contact.id) ?? [];
+      const latest = history.at(-1);
+      return { ...contact, history, latest, updatedAt: latest?.createdAt ?? contact.createdAt };
     })
-    .sort(
-      (a, b) =>
-        (b.latest?.createdAt ?? 0) - (a.latest?.createdAt ?? 0) ||
-        a.member.name.localeCompare(b.member.name),
-    );
+    .sort((a, b) => b.updatedAt - a.updatedAt || a.name.localeCompare(b.name));
 }
-
-export type ChatThread = ReturnType<typeof chatThreads>[number];
 
 const dateFormat = new Intl.DateTimeFormat("en", {
   month: "short",

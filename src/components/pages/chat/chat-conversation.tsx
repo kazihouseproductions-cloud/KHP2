@@ -1,33 +1,21 @@
 import { Fragment, useEffect, useRef } from "react";
 import { Icon } from "@/components/ui/icon";
-import { MemberAvatar } from "@/components/ui/member-avatar";
+import { ChatAvatar } from "./chat-avatar";
+import { ChatAttachmentView } from "./chat-attachment";
+import { ChatComposer, type ComposerProps } from "./chat-composer";
 import { chatDate, chatTime, type ChatThread } from "@/lib/chat";
 
-type Props = {
+type Props = ComposerProps & {
   thread: ChatThread;
-  draft: string;
   error: string;
-  onDraft: (text: string) => void;
-  onSend: () => void;
-  onInbox: () => void;
   onMinimize: () => void;
   onClose: () => void;
 };
 
-export function ChatConversation({
-  thread,
-  draft,
-  error,
-  onDraft,
-  onSend,
-  onInbox,
-  onMinimize,
-  onClose,
-}: Props) {
-  const { member, history, latest } = thread;
+export function ChatConversation({ thread, error, onMinimize, onClose, ...composer }: Props) {
+  const { name, history, latest } = thread;
   const log = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const composer = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
   }, []);
@@ -38,7 +26,7 @@ export function ChatConversation({
 
   return (
     <section
-      aria-label={`Chat with ${member.name}`}
+      aria-label={`Chat with ${name}`}
       className="chat-window chat-card"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
@@ -48,15 +36,12 @@ export function ChatConversation({
       }}
     >
       <header className="flex items-center gap-2 border-b border-neutral-100 px-3 py-3">
-        {/* <button type="button" className="chat-control" aria-label="Back to chats" onClick={onInbox}>
-          <Icon name="back" size={17} />
-        </button> */}
-        <MemberAvatar member={member} />
+        <ChatAvatar thread={thread} />
         <div className="min-w-0 flex-1">
           <h2 tabIndex={-1} ref={heading} className="truncate text-sm font-semibold outline-none">
-            {member.name}
+            {name}
           </h2>
-          <p className="truncate text-xs text-neutral-500">{member.jobTitle || member.role}</p>
+          <p className="truncate text-xs text-neutral-500">{thread.description}</p>
         </div>
         <button
           type="button"
@@ -88,7 +73,7 @@ export function ChatConversation({
       >
         {history.length === 0 && (
           <p className="my-auto text-center text-sm text-neutral-500">
-            Start a conversation with {member.name}.
+            Start a conversation with {name}.
           </p>
         )}
         {history.map((message, index) => {
@@ -98,8 +83,15 @@ export function ChatConversation({
             <Fragment key={message.id}>
               {dayChanged && <p className="chat-day">{date}</p>}
               <div className="chat-message" data-outgoing={message.outgoing}>
-                <span className="sr-only">{message.outgoing ? "You" : member.name}: </span>
-                <p className="chat-bubble">{message.body}</p>
+                <span className="sr-only">{message.outgoing ? "You" : name}: </span>
+                {message.body && <p className="chat-bubble">{message.body}</p>}
+                {message.attachments?.map((attachment) => (
+                  <ChatAttachmentView
+                    key={attachment.id}
+                    owner={composer.owner}
+                    attachment={attachment}
+                  />
+                ))}
                 <time
                   dateTime={new Date(message.createdAt).toISOString()}
                   className="px-1 pt-0.5 text-[10px] text-neutral-500"
@@ -116,38 +108,7 @@ export function ChatConversation({
           {error}
         </p>
       )}
-      <form
-        className="chat-composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (draft.trim()) onSend();
-          composer.current?.focus();
-        }}
-      >
-        <textarea
-          ref={composer}
-          rows={1}
-          aria-label={`Message to ${member.name}`}
-          placeholder="Write a message…"
-          value={draft}
-          onChange={(event) => onDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-        />
-        <button
-          type="submit"
-          aria-label="Send message"
-          title="Send message"
-          disabled={!draft.trim()}
-          className="chat-send"
-        >
-          <Icon name="send" size={18} />
-        </button>
-      </form>
+      <ChatComposer {...composer} name={name} />
     </section>
   );
 }

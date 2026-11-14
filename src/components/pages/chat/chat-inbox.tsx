@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icon";
-import { MemberAvatar } from "@/components/ui/member-avatar";
-import { chatDate, chatTime, type ChatThread } from "@/lib/chat";
+import { chatDate, chatTime, messagePreview, type ChatThread } from "@/lib/chat";
+import type { Member } from "@/lib/members";
+import { ChatAvatar } from "./chat-avatar";
+import { ChatGroupForm } from "./chat-group-form";
 
 type Props = {
   threads: ChatThread[];
@@ -9,9 +11,20 @@ type Props = {
   error: string;
   onOpen: (id: string) => void;
   onClose: () => void;
+  members: readonly Member[];
+  onCreateGroup: (name: string, ids: string[]) => Promise<void>;
 };
 
-export function ChatInbox({ threads, unread, error, onOpen, onClose }: Props) {
+export function ChatInbox({
+  threads,
+  unread,
+  error,
+  members,
+  onCreateGroup,
+  onOpen,
+  onClose,
+}: Props) {
+  const [newGroup, setNewGroup] = useState(false);
   const [query, setQuery] = useState("");
   const [composing, setComposing] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
@@ -23,10 +36,22 @@ export function ChatInbox({ threads, unread, error, onOpen, onClose }: Props) {
 
   const term = query.trim().toLowerCase();
   const visible = threads.filter(
-    ({ member, latest }) =>
-      member.name.toLowerCase().includes(term) &&
-      (composing || ((latest || term) && (!unreadOnly || unread.includes(member.id)))),
+    ({ id, name, group, latest }) =>
+      name.toLowerCase().includes(term) &&
+      (composing ? !group : (latest || group || term) && (!unreadOnly || unread.includes(id))),
   );
+
+  if (newGroup)
+    return (
+      <section id="utility-panel" aria-label="New group" className="chat-inbox chat-card">
+        <ChatGroupForm
+          members={members}
+          onCreate={onCreateGroup}
+          error={error}
+          onBack={() => setNewGroup(false)}
+        />
+      </section>
+    );
 
   return (
     <section id="utility-panel" aria-label="Chats" className="chat-inbox chat-card">
@@ -70,6 +95,13 @@ export function ChatInbox({ threads, unread, error, onOpen, onClose }: Props) {
           <Icon name="close" size={17} />
         </button>
       </header>
+      <button
+        type="button"
+        onClick={() => setNewGroup(true)}
+        className="mx-4 mt-2 flex items-center gap-2 self-start rounded-full px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50"
+      >
+        <Icon name="people" size={16} /> New group
+      </button>
       <label className="mx-4 mt-3 flex shrink-0 items-center gap-2 rounded-full bg-neutral-100 px-3 text-neutral-500 focus-within:ring-1 focus-within:ring-blue-500">
         <Icon name="search" size={16} />
         <input
@@ -98,27 +130,28 @@ export function ChatInbox({ threads, unread, error, onOpen, onClose }: Props) {
         </div>
       )}
       <ul className="chat-thread-list">
-        {visible.map(({ member, latest }) => {
-          const isUnread = !composing && unread.includes(member.id);
-          const date = latest && chatDate(latest.createdAt);
+        {visible.map((thread) => {
+          const { id, name, latest, updatedAt, description } = thread;
+          const isUnread = !composing && unread.includes(id);
+          const date = updatedAt && chatDate(updatedAt);
           return (
-            <li key={member.id}>
+            <li key={id}>
               <button
                 type="button"
                 className="chat-row"
-                onClick={() => onOpen(member.id)}
-                aria-label={`Message ${member.name}${isUnread ? ", unread" : ""}`}
+                onClick={() => onOpen(id)}
+                aria-label={`Message ${name}${isUnread ? ", unread" : ""}`}
               >
-                <MemberAvatar member={member} />
+                <ChatAvatar thread={thread} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline gap-2">
-                    <span className="flex-1 truncate text-sm font-semibold">{member.name}</span>
-                    {latest && !composing && (
+                    <span className="flex-1 truncate text-sm font-semibold">{name}</span>
+                    {updatedAt > 0 && !composing && (
                       <time
                         className="shrink-0 text-[10px] text-neutral-500"
-                        dateTime={new Date(latest.createdAt).toISOString()}
+                        dateTime={new Date(updatedAt).toISOString()}
                       >
-                        {date === "Today" ? chatTime(latest.createdAt) : date}
+                        {date === "Today" ? chatTime(updatedAt) : date}
                       </time>
                     )}
                   </span>
@@ -127,10 +160,12 @@ export function ChatInbox({ threads, unread, error, onOpen, onClose }: Props) {
                       className={`flex-1 truncate text-xs ${isUnread ? "font-medium text-neutral-800" : "text-neutral-500"}`}
                     >
                       {composing
-                        ? member.jobTitle || member.role
+                        ? description
                         : latest
-                          ? (latest.outgoing ? "You: " : "") + latest.body
-                          : "Start a conversation"}
+                          ? (latest.outgoing ? "You: " : "") + messagePreview(latest)
+                          : thread.group
+                            ? description
+                            : "Start a conversation"}
                     </span>
                     {isUnread && <span className="size-2 shrink-0 rounded-full bg-blue-600" />}
                   </span>
