@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemberDirectory } from "@/stores/member-store";
 import { createPortal } from "react-dom";
 import { ScrollArea } from "@/components/common/scroll-area";
 import { WorkspaceGlyph } from "@/components/ui/workspace-glyph";
-import { type DemoMember, findMemberTasks, getWorkspaceMembers } from "@/lib/members";
-import type { Task } from "@/lib/tasks";
+import { sectionTasksHref } from "@/lib/board-route";
+import { type Member, findMemberTasks, getWorkspaceMembers } from "@/lib/members";
+import type { Task, TaskStatus } from "@/lib/tasks";
 import { type BoardItem, getPinAncestry, isTaskBoard, nodeHref } from "@/lib/workspaces";
 import { listenToTaskStorage, useTaskStore } from "@/stores/task-store";
+import { MemberTaskForm } from "./member-task-form";
 import { TaskCard } from "./task-card";
 import { TaskColumns } from "./task-columns";
 import { TaskForm } from "./task-form";
 
-type TaskProject = { board: BoardItem; workspace: BoardItem; tasks: Task[] };
+type TaskProject = { board: BoardItem; workspace: BoardItem; href: string; tasks: Task[] };
 
 function groupByProject(tasks: Task[], byId: ReadonlyMap<string, BoardItem>) {
   const projects = new Map<string, TaskProject>();
@@ -19,8 +22,14 @@ function groupByProject(tasks: Task[], byId: ReadonlyMap<string, BoardItem>) {
     if (!project) {
       const board = byId.get(task.sectionId);
       const path = getPinAncestry(board, (id) => byId.get(id));
-      if (!board || !path.length || !isTaskBoard(board, path.length)) continue;
-      project = { board, workspace: path[0], tasks: [] };
+      if (!board || !path.length) continue;
+      const href = nodeHref(board);
+      project = {
+        board,
+        workspace: path[0],
+        href: isTaskBoard(board, path.length) ? href : sectionTasksHref(href),
+        tasks: [],
+      };
       projects.set(board.id, project);
     }
     project.tasks.push(task);
@@ -32,14 +41,18 @@ export function MemberTasks({
   member,
   byId,
   boardHref,
+  preferredSectionId,
 }: {
-  member: DemoMember;
+  member: Member;
   byId: ReadonlyMap<string, BoardItem>;
   boardHref?: string;
+  preferredSectionId?: string;
 }) {
+  const directory = useMemberDirectory();
   const allTasks = useTaskStore((state) => state.tasks);
   const [view, setView] = useState<"project" | "status">("project");
   const [editing, setEditing] = useState<Task | null>(null);
+  const [creating, setCreating] = useState<TaskStatus | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (boardHref) heading.current?.focus({ preventScroll: true });
@@ -96,10 +109,11 @@ export function MemberTasks({
       {boardHref ? (
         <TaskColumns
           tasks={memberTasks}
+          onAdd={setCreating}
           onEdit={setEditing}
           sourceFor={(task) => {
             const project = projects.get(task.sectionId);
-            return project && { title: project.board.title, href: nodeHref(project.board) };
+            return project && { title: project.board.title, href: project.href };
           }}
         />
       ) : view === "project" ? (
@@ -107,12 +121,12 @@ export function MemberTasks({
           {groups.length === 0 && (
             <p className="text-sm text-neutral-600">No tasks are assigned to you yet.</p>
           )}
-          {groups.map(({ board, tasks }) => (
+          {groups.map(({ board, href, tasks }) => (
             <section key={board.id} aria-label={board.title}>
               <header className="mb-4 flex items-center justify-between gap-3 border-b border-[#bcbcbc] pb-4">
                 <h2 className="min-w-0 break-words text-2xl font-medium">{board.title}</h2>
                 <a
-                  href={nodeHref(board)}
+                  href={href}
                   className="visit-project"
                   aria-label={`Visit project: ${board.title}`}
                 >
@@ -132,6 +146,17 @@ export function MemberTasks({
           <TaskColumns tasks={groups.flatMap((group) => group.tasks)} onEdit={setEditing} />
         </ScrollArea>
       )}
+      {creating &&
+        createPortal(
+          <MemberTaskForm
+            member={member}
+            byId={byId}
+            preferredSectionId={preferredSectionId}
+            status={creating}
+            onClose={() => setCreating(null)}
+          />,
+          document.body,
+        )}
       {editing &&
         memberTasks.some((task) => task.id === editing.id) &&
         createPortal(
@@ -139,7 +164,7 @@ export function MemberTasks({
             task={editing}
             sectionId={editing.sectionId}
             status={editing.status}
-            members={getWorkspaceMembers(editingProject?.workspace)}
+            members={getWorkspaceMembers(editingProject?.workspace, directory)}
             onClose={() => setEditing(null)}
           />,
           document.body,

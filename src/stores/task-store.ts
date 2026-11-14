@@ -1,15 +1,25 @@
 import { create } from "zustand";
-import { readBoardItem } from "@/lib/board-records";
+import { withActivity, workspaceRefs } from "@/lib/activity-log";
+import { readBoardItems } from "@/lib/board-records";
 import { readRecords, watchRecords } from "@/lib/local-records";
-import { getWorkspaceMembers } from "@/lib/members";
+import { readMemberDirectory } from "@/lib/member-records";
+import { getWorkspaceMembers, indexMemberNames, type Member, memberNameKey } from "@/lib/members";
 import { taskChange, taskPrefix as prefix, withTaskHistory } from "@/lib/task-history";
 import { isTask, type Task, type TaskFields, type TaskStatus } from "@/lib/tasks";
-import { getPinAncestry, isTaskBoard } from "@/lib/workspaces";
+import { type BoardItem, getPinAncestry, indexBoardItems } from "@/lib/workspaces";
+
+function resolveTaskNames(task: Task, names: ReadonlyMap<string, Member>): Task {
+  const assignedTo = names.get(memberNameKey(task.assignedTo))?.name ?? task.assignedTo;
+  const assignedBy = names.get(memberNameKey(task.assignedBy))?.name ?? task.assignedBy;
+  return assignedTo === task.assignedTo && assignedBy === task.assignedBy
+    ? task
+    : { ...task, assignedTo, assignedBy };
+}
 
 function readTask(id: string): Task {
   const stored: unknown = JSON.parse(localStorage.getItem(prefix + id) ?? "null");
   if (!isTask(stored) || stored.id !== id) throw new Error("This task is no longer available.");
-  return stored;
+  return resolveTaskNames(stored, indexMemberNames(readMemberDirectory()));
 }
 
 type TaskStore = {
@@ -20,11 +30,41 @@ type TaskStore = {
 };
 
 export const useTaskStore = create<TaskStore>((set) => {
-  function persist(task: Task, previous?: Task) {
+  function persist(task: Task, path: BoardItem[], previous?: Task) {
+    const details: string[] = [];
+    if (previous) {
+      if (task.status !== previous.status) details.push(`${previous.status} → ${task.status}`);
+      if (task.title !== previous.title) details.push(`Previously “${previous.title}”`);
+      for (const [key, label] of [
+        ["assignedTo", "Assignee"],
+        ["assignedBy", "Assigned by"],
+        ["priority", "Priority"],
+        ["date", "Start date"],
+        ["deadline", "Deadline"],
+      ] as const) {
+        if (task[key] !== previous[key])
+          details.push(`${label}: ${previous[key] || "None"} → ${task[key] || "None"}`);
+      }
+      if (task.sectionId !== previous.sectionId) details.push(`Moved to “${path.at(-1)?.title}”`);
+      if (!details.length) return;
+    } else {
+      details.push(task.status);
+      if (task.assignedTo) details.push(`Assigned to ${task.assignedTo}`);
+    }
     try {
       const approvals = Number(task.status === "Approved" && previous?.status !== "Approved");
-      withTaskHistory(taskChange(previous ? [previous] : [], [task], approvals), () =>
-        localStorage.setItem(prefix + task.id, JSON.stringify(task)),
+      const action = previous ? (previous.status !== task.status ? "Moved" : "Updated") : "Created";
+      withActivity(
+        {
+          area: "Tasks",
+          description: `${action} task “${task.title}”`,
+          detail: details.join(" · "),
+          workspaces: workspaceRefs(path.slice(0, 1)),
+        },
+        () =>
+          withTaskHistory(taskChange(previous ? [previous] : [], [task], approvals), () =>
+            localStorage.setItem(prefix + task.id, JSON.stringify(task)),
+          ),
       );
     } catch {
       throw new Error("Your browser could not save the task. Allow local storage and try again.");
@@ -40,7 +80,8 @@ export const useTaskStore = create<TaskStore>((set) => {
     tasks: [],
     load: () => {
       try {
-        set({ tasks: readRecords(prefix, isTask) });
+        const names = indexMemberNames(readMemberDirectory());
+        set({ tasks: readRecords(prefix, isTask).map((task) => resolveTaskNames(task, names)) });
       } catch {
         // The board can still be viewed when browser storage is disabled.
       }
@@ -55,11 +96,10 @@ export const useTaskStore = create<TaskStore>((set) => {
         throw new Error(
           "This task changed in another tab. Close and reopen it to edit the latest version.",
         );
-      const section = readBoardItem(sectionId);
-      const path = getPinAncestry(section, readBoardItem);
-      if (!path.length || !isTaskBoard(section, path.length))
-        throw new Error("End this branch before creating tasks here.");
-      const members = getWorkspaceMembers(path[0]);
+      const { byId } = indexBoardItems(readBoardItems());
+      const path = getPinAncestry(byId.get(sectionId), (id) => byId.get(id));
+      if (!path.length) throw new Error("This section is no longer available.");
+      const members = getWorkspaceMembers(path[0], readMemberDirectory());
       for (const field of ["assignedTo", "assignedBy"] as const) {
         const name = fields[field].trim();
         if (!name || (original?.sectionId === sectionId && name === original[field].trim()))
@@ -79,12 +119,16 @@ export const useTaskStore = create<TaskStore>((set) => {
           id: original?.id ?? crypto.randomUUID(),
           createdAt: original?.createdAt ?? Date.now(),
         },
+        path,
         original,
       );
     },
     move(id, status) {
       const task = readTask(id);
-      if (task.status !== status) persist({ ...task, status }, task);
+      if (task.status === status) return;
+      const { byId } = indexBoardItems(readBoardItems());
+      const path = getPinAncestry(byId.get(task.sectionId), (id) => byId.get(id));
+      persist({ ...task, status }, path, task);
     },
   };
 });

@@ -86,6 +86,38 @@
     @apply grid gap-x-10 gap-y-6;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   }
+  .attendance-grid .calendar-cell {
+    min-height: clamp(48px, 6.4vh, 68px);
+  }
+  .attendance-day {
+    @apply items-start rounded-sm text-left hover:bg-neutral-50;
+  }
+  .attendance-day[aria-pressed="true"] {
+    @apply bg-sky-50 ring-1 ring-inset ring-sky-600;
+  }
+  .attendance-number {
+    @apply px-1 text-base font-medium tabular-nums;
+  }
+  .attendance-day[aria-current="date"] .attendance-number {
+    @apply rounded bg-neutral-800 text-white;
+  }
+  .attendance-date-input {
+    @apply min-w-0 rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-sm;
+  }
+  .attendance-primary {
+    @apply rounded-lg bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40;
+  }
+  .attendance-mark {
+    @apply rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-medium hover:bg-neutral-100 aria-pressed:border-neutral-800 aria-pressed:bg-neutral-800 aria-pressed:text-white;
+  }
+  @container (max-width: 520px) {
+    .attendance-cell-status {
+      @apply gap-0 px-1 py-0.5 text-[10px];
+    }
+    .attendance-cell-status span:first-child {
+      @apply hidden;
+    }
+  }
   .calendar-mini-date {
     @apply relative py-1;
   }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useMemberDirectory } from "@/stores/member-store";
 import { createPortal } from "react-dom";
 import { Modal } from "@/components/common/modal";
 import { ScrollArea } from "@/components/common/scroll-area";
@@ -32,6 +33,7 @@ export function TaskSchedule({
   tool: "calendar" | "gantt";
   byId: ReadonlyMap<string, BoardItem>;
 }) {
+  const directory = useMemberDirectory();
   const isGantt = tool === "gantt";
   const title = isGantt ? "Gantt Chart" : "Calendar";
   const tasks = useTaskStore((state) => state.tasks);
@@ -125,7 +127,7 @@ export function TaskSchedule({
               task={editing}
               sectionId={editing.sectionId}
               status={editing.status}
-              members={getWorkspaceMembers(workspace)}
+              members={getWorkspaceMembers(workspace, directory)}
               onClose={() => setEditing(null)}
             />,
             document.body,

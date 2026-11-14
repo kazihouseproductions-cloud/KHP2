@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Modal } from "@/components/common/modal";
-import type { DemoMember } from "@/lib/members";
+import type { Member } from "@/lib/members";
 import {
   newTaskFields,
   priorities,
@@ -13,9 +13,11 @@ import { useTaskStore } from "@/stores/task-store";
 
 type TaskFormProps = {
   sectionId: string;
-  members: readonly DemoMember[];
+  members: readonly Member[];
   status: TaskStatus;
   task?: Task;
+  assignedMember?: Member;
+  sectionPicker?: ReactNode;
   onClose: () => void;
 };
 
@@ -26,7 +28,7 @@ function TaskMemberSelect({
   onChange,
 }: {
   name: "assignedTo" | "assignedBy";
-  members: readonly DemoMember[];
+  members: readonly Member[];
   value: string;
   onChange: (name: "assignedTo" | "assignedBy", value: string) => void;
 }) {
@@ -56,10 +58,28 @@ function TaskMemberSelect({
   );
 }
 
-export function TaskForm({ sectionId, members, status, task, onClose }: TaskFormProps) {
-  const [fields, setFields] = useState<TaskFields>(() => task ?? newTaskFields(status));
+export function TaskForm({
+  sectionId,
+  members,
+  status,
+  task,
+  assignedMember,
+  sectionPicker,
+  onClose,
+}: TaskFormProps) {
+  const [fields, setFields] = useState<TaskFields>(
+    () =>
+      task ?? {
+        ...newTaskFields(status),
+        assignedTo: assignedMember?.name ?? "",
+      },
+  );
   const [error, setError] = useState("");
   const save = useTaskStore((state) => state.save);
+  const assignedBy =
+    assignedMember && !members.some((member) => member.name === fields.assignedBy)
+      ? ""
+      : fields.assignedBy;
   function update<K extends keyof TaskFields>(key: K, value: TaskFields[K]) {
     setFields((previous) => ({ ...previous, [key]: value }));
     setError("");
@@ -67,7 +87,11 @@ export function TaskForm({ sectionId, members, status, task, onClose }: TaskForm
   function submit(event: FormEvent) {
     event.preventDefault();
     try {
-      save(sectionId, fields, task);
+      save(
+        sectionId,
+        assignedMember ? { ...fields, assignedTo: assignedMember.name, assignedBy } : fields,
+        task,
+      );
       onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to save the task.");
@@ -90,6 +114,7 @@ export function TaskForm({ sectionId, members, status, task, onClose }: TaskForm
             onChange={(e) => update("title", e.target.value)}
           />
         </label>
+        {sectionPicker}
         <label className="task-field max-[420px]:col-span-2">
           Date
           <input
@@ -109,16 +134,23 @@ export function TaskForm({ sectionId, members, status, task, onClose }: TaskForm
             onChange={(e) => update("deadline", e.target.value)}
           />
         </label>
-        <TaskMemberSelect
-          name="assignedTo"
-          members={members}
-          value={fields.assignedTo}
-          onChange={update}
-        />
+        {assignedMember ? (
+          <label className="task-field max-[420px]:col-span-2">
+            Assigned to
+            <input name="assignedTo" value={assignedMember.name} readOnly />
+          </label>
+        ) : (
+          <TaskMemberSelect
+            name="assignedTo"
+            members={members}
+            value={fields.assignedTo}
+            onChange={update}
+          />
+        )}
         <TaskMemberSelect
           name="assignedBy"
           members={members}
-          value={fields.assignedBy}
+          value={assignedBy}
           onChange={update}
         />
         <label className="task-field">
@@ -155,7 +187,11 @@ export function TaskForm({ sectionId, members, status, task, onClose }: TaskForm
           <button type="button" className="secondary-button" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="primary-button" disabled={!fields.title.trim()}>
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={!fields.title.trim() || !sectionId}
+          >
             {task ? "Save changes" : "Create task"}
           </button>
         </footer>

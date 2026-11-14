@@ -6,6 +6,12 @@ import * as members from "../src/lib/members.ts";
 import { newTaskFields } from "../src/lib/tasks.ts";
 import type { HistoryEntry } from "../src/lib/task-history.ts";
 import { taskTrends } from "../src/lib/task-trends.ts";
+import { filterActivity, readActivity, withActivity } from "../src/lib/activity-log.ts";
+import { useAttendanceStore } from "../src/stores/attendance-store.ts";
+import { useWorkHoursStore } from "../src/stores/work-hours-store.ts";
+import { sampleWeek } from "../src/lib/work-hours.ts";
+import { useMemberStore } from "../src/stores/member-store.ts";
+import { readMemberDirectory } from "../src/lib/member-records.ts";
 
 const itemPrefix = "khp.board.v1.item.";
 const taskPrefix = "khp.board.v1.task.";
@@ -37,6 +43,9 @@ class MemoryStorage {
 }
 
 let storage: MemoryStorage;
+function setActorRole(role: members.MemberRole) {
+  storage.setItem("khp.members.v1.ayesha", JSON.stringify({ ...members.previewMember, role, createdAt: 1 }));
+}
 const pin = (id: string, parentId: string | null = null) => ({
   id,
   parentId,
@@ -73,6 +82,144 @@ beforeEach(() => {
   useTaskStore.setState({ tasks: [] });
 });
 
+test("creating a member shares one routine across workspaces and makes the member assignable", async () => {
+  setActorRole("Admin");
+  seed();
+  const days = { ...sampleWeek, Monday: { start: "08:30", end: "16:45" }, Thursday: null };
+  const { id, name } = await useMemberStore.getState().add({
+    name: "  Mika Roy ",
+    role: "Member", jobTitle: "Lighting Artist",
+    workspaceIds: ["root", "other"],
+    days,
+  });
+  const directory = readMemberDirectory();
+  assert.equal(directory.find((member) => member.id === id)?.jobTitle, "Lighting Artist");
+  for (const workspace of useBoardStore.getState().items.filter((item) => item.parentId === null)) {
+    assert.ok(members.getWorkspaceMembers(workspace, directory).some((member) => member.id === id));
+  }
+  useWorkHoursStore.getState().load();
+  const routine = useWorkHoursStore.getState().routines.get(id)!;
+  assert.deepEqual(routine.days, days);
+  await useWorkHoursStore.getState().save(id, sampleWeek, routine);
+  useTaskStore
+    .getState()
+    .save("section", { ...newTaskFields("To Do"), title: "Light scene", assignedTo: name });
+  await useAttendanceStore.getState().save(id, "2026-11-14", { status: "Present" });
+  useAttendanceStore.getState().load();
+  assert.equal(useAttendanceStore.getState().entries.get(`2026-11-14/${id}`)?.status, "Present");
+  assert.deepEqual(
+    readActivity()
+      .find((entry) => entry.area === "Members")
+      ?.workspaces.map((w) => w.id)
+      .sort(),
+    ["other", "root"],
+  );
+  await assert.rejects(
+    useMemberStore.getState().add({ name: "mika ROY", role: "Executive", workspaceIds: [] }),
+    /already exists/,
+  );
+  assert.equal(readMemberDirectory().length, members.demoMembers.length + 1);
+});
+
+test("a failed schedule write restores both workspace rosters and the directory", async () => {
+  setActorRole("Admin");
+  seed();
+  const before = new Map(storage.records);
+  const write = storage.setItem.bind(storage);
+  storage.setItem = (key, value) => {
+    if (key.startsWith("khp.work-hours.v1.")) throw new Error("Storage full");
+    write(key, value);
+  };
+  await assert.rejects(
+    useMemberStore.getState().add({
+      name: "Jamie",
+      role: "Admin",
+      workspaceIds: ["root", "other"],
+      days: sampleWeek,
+    }),
+    /Storage full/,
+  );
+  assert.deepEqual(storage.records, before);
+});
+
+test("legacy job titles and seeded members survive profile edits, renames and reloads", async () => {
+  setActorRole("Admin");
+  seed();
+  storage.setItem("khp.members.v1.guest", JSON.stringify({
+    id: "guest", name: "Old Profile", role: "Sound Artist", color: "blue", initials: "OP", createdAt: 1,
+  }));
+  const directory = readMemberDirectory();
+  const guest = directory.find(m => m.id === "guest")!;
+  assert.equal(guest.role, "Member");
+  assert.equal(guest.jobTitle, "Sound Artist");
+  const original = directory.find(m => m.id === "ayesha")!;
+  const store = useMemberStore.getState();
+  useTaskStore.getState().save("section", {
+    ...newTaskFields("Approved"), title: "Release", assignedTo: original.name, assignedBy: original.name,
+  });
+  await useAttendanceStore.getState().save(original.id, "2026-11-14", {status: "Late"});
+  const updated = await store.update(original, {
+    ...original, name: "Ayesha Noor", email: "ayesha@example.org", role: "Admin",
+    days: { ...sampleWeek, Tuesday: null },
+  });
+  assert.equal(updated.jobTitle, original.jobTitle);
+  assert.equal(updated.id, original.id);
+  assert.equal(readMemberDirectory().length, directory.length);
+  assert.deepEqual(readMemberDirectory().find(m => m.id === original.id), updated);
+  useTaskStore.getState().load();
+  const t = useTaskStore.getState().tasks.find(t => t.title === "Release")!;
+  assert.deepEqual([t.assignedTo, t.assignedBy], [updated.name, updated.name]);
+  useTaskStore.getState().save("section", { ...t, title: "Release v2" }, t);
+  const history = [...storage.records].filter(([k]) => k.startsWith("khp.analytics.v1.")).map(([,v]) => JSON.parse(v));
+  const trends = taskTrends(history, 1, new Date(), new Map(), readMemberDirectory());
+  assert.equal(trends.members.filter(row => row.name === updated.name).length, 1);
+  assert.ok(!trends.members.some(row => row.name === original.name));
+  assert.equal(useAttendanceStore.getState().entries.get("2026-11-14/ayesha")?.status, "Late");
+  assert.equal(useWorkHoursStore.getState().routines.get(original.id)?.days.Tuesday, null);
+  await assert.rejects(store.update(original, { ...original, role: "Executive" }), /profile changed/);
+  await assert.rejects(store.update(updated, { ...updated, days: sampleWeek }), /Work hours changed/);
+  await assert.rejects(store.add({ name: original.name, role: "Member", workspaceIds: [] }), /already exists/);
+});
+
+test("a failed profile update also restores the previous routine", async () => {
+  setActorRole("Admin");
+  const member = readMemberDirectory().find(m => m.id === "nadia")!;
+  const before = new Map(storage.records);
+  const write = storage.setItem.bind(storage);
+  storage.setItem = (key, value) => {
+    if (key === "khp.members.v1." + member.id) throw new Error("Storage full");
+    write(key, value);
+  };
+  await assert.rejects(
+    useMemberStore.getState().update(member, { ...member, role: "Executive", days: sampleWeek }),
+    /Storage full/,
+  );
+  assert.deepEqual(storage.records, before);
+});
+
+test("members can edit their own details while role and schedule changes require an admin", async () => {
+  const store = useMemberStore.getState();
+  const actor = members.currentMember(readMemberDirectory());
+  const other = members.demoMembers[1];
+  const updated = await store.update(actor, { ...actor, name: "Ayesha Noor", jobTitle: "Editor", email: "editing@example.org" });
+  assert.equal(updated.email, "editing@example.org");
+  const before = new Map(storage.records);
+  await assert.rejects(store.update(updated, { ...updated, role: "Admin" }), /own role/);
+  await assert.rejects(store.update(other, { ...other, role: "Admin" }), /Only admins/);
+  await assert.rejects(store.update(updated, { ...updated, days: sampleWeek }), /working hours/);
+  await assert.rejects(useWorkHoursStore.getState().save(other.id, sampleWeek), /Only admins/);
+  await assert.rejects(store.add({name: "Jo", role: "Executive", workspaceIds: []}), /Only admins/);
+  await assert.rejects(store.add({name: "Jo", role: "Member", days: sampleWeek, workspaceIds: []}), /Only admins/);
+  assert.deepEqual(storage.records, before);
+  setActorRole("Admin");
+  const admin = members.currentMember(readMemberDirectory());
+  await assert.rejects(store.update(admin, { ...admin, role: "Member" }), /own role/);
+  const promoted = await store.update(other, { ...other, role: "Executive", days: sampleWeek });
+  assert.equal(promoted.role, "Executive");
+  setActorRole("Executive");
+  await assert.rejects(store.update(promoted, { ...promoted, role: "Admin" }), /Only admins/);
+});
+
 test("forms, board moves and branch deletion journal only committed changes", async () => {
   const item = await useBoardStore.getState().add("Studio", "office", null);
   await useBoardStore.getState().endBranch(item.id);
@@ -95,7 +242,7 @@ test("forms, board moves and branch deletion journal only committed changes", as
   assert.throws(() => useBoardStore.getState().remove(root, "DELETE"));
   assert.deepEqual(history(), before);
   useBoardStore.getState().remove(root, "DELETE");
-  const [today] = taskTrends(history(), 1, new Date()).days;
+  const [today] = taskTrends(history(), 1, new Date(), new Map()).days;
   assert.deepEqual([today.approvals, today.approved, today.total], [2, 0, 0]);
 });
 
@@ -104,7 +251,7 @@ test("new workspaces keep their catalog icon and only the members chosen for tha
   const first = await board.add("Studio", "core:interface-home-1", null);
   const skipped = await board.add("Studio", "core:interface-folder", null);
   assert.deepEqual(first.memberIds, []);
-  board.addMembers(first.id, ["nadia", "rafi"]);
+  await board.addMembers(first.id, ["nadia", "rafi"]);
   board.load();
   const items = useBoardStore.getState().items;
   assert.deepEqual(
@@ -116,7 +263,7 @@ test("new workspaces keep their catalog icon and only the members chosen for tha
     { ...skipped, memberIds: [] },
   );
   await assert.rejects(() => board.add("Invalid", "core:missing-icon", null), /icon/i);
-  assert.equal(storage.length, 2);
+  assert.equal([...storage.records.keys()].filter((key) => key.startsWith(itemPrefix)).length, 2);
 });
 
 test("editing a pin persists its title and icon without losing members or children", () => {
@@ -131,9 +278,10 @@ test("editing a pin persists its title and icon without losing members or childr
       ...original,
       title: "Renamed",
       icon: "school",
-      memberIds: ["nadia"],
+      memberIds: ["nadia", "ayesha", "tanvir"],
     },
   );
+  assert.deepEqual(JSON.parse(storage.getItem(itemPrefix + "root")!).memberIds, ["nadia"]);
   assert.equal(useBoardStore.getState().items.length, 4);
 });
 
@@ -144,11 +292,11 @@ test("a deep branch can end in tasks while its siblings keep growing", async () 
   let tip = workspace;
   for (let i = 0; i < 32; i++) tip = await board.add("Section", "office", tip.id);
   const fields = { ...newTaskFields("To Do"), title: "Review" };
-  assert.throws(() => useTaskStore.getState().save(tip.id, fields), /end this branch/i);
+  useTaskStore.getState().save(workspace.id, { ...fields, title: "Workspace review" });
   await assert.rejects(board.endBranch(workspace.id), /already has sections/i);
   await board.endBranch(tip.id);
   await board.endBranch(tip.id);
-  assert.equal(useTaskStore.getState().tasks.length, 0);
+  assert.equal(useTaskStore.getState().tasks.length, 1);
   board.load();
   assert.equal(
     useBoardStore.getState().items.find((item) => item.id === tip.id)?.boardType,
@@ -157,7 +305,10 @@ test("a deep branch can end in tasks while its siblings keep growing", async () 
   await assert.rejects(board.add("Hidden child", "office", tip.id), /cannot contain/i);
   useTaskStore.getState().save(tip.id, fields);
   await board.add("Still growing", "office", sibling.id);
-  assert.equal(useTaskStore.getState().tasks[0]?.sectionId, tip.id);
+  assert.deepEqual(
+    useTaskStore.getState().tasks.map((task) => task.sectionId),
+    [workspace.id, tip.id],
+  );
 });
 
 test("adding a child and ending the same empty branch cannot both succeed", async () => {
@@ -178,40 +329,71 @@ test("adding a child and ending the same empty branch cannot both succeed", asyn
   }
 });
 
-test("all nested levels start unassigned and can select anyone from their own workspace", async () => {
+test("adding a member at depth includes every ancestor and leaves sibling rosters independent", async () => {
   const board = useBoardStore.getState();
   const workspace = await board.add("Studio", "office", null);
   const other = await board.add("Other studio", "school", null);
-  board.addMembers(workspace.id, ["nadia", "rafi"]);
-  board.addMembers(other.id, ["samira"]);
+  await board.addMembers(workspace.id, ["nadia"]);
+  await board.addMembers(other.id, ["samira"]);
   const department = await board.add("Design", "core:interface-folder", workspace.id);
   const project = await board.add("Pilot", "core:interface-folder", department.id);
   const section = await board.add("Review", "core:interface-folder", project.id);
-  for (const item of [department, project, section]) {
-    assert.deepEqual(item.memberIds, []);
-    assert.throws(() => board.addMembers(item.id, ["samira"]), /roster/i);
-  }
-  board.addMembers(department.id, ["nadia"]);
-  board.addMembers(section.id, ["rafi"]);
+  const sibling = await board.add("Other project", "office", department.id);
+  await Promise.all([
+    board.addMembers(section.id, ["rafi"]),
+    board.addMembers(section.id, ["samira"]),
+  ]);
   board.load();
   const items = useBoardStore.getState().items;
-  assert.deepEqual(items.find((item) => item.id === project.id)?.memberIds, []);
-  assert.deepEqual(items.find((item) => item.id === section.id)?.memberIds, ["rafi"]);
+  for (const node of [section, project, department]) {
+    assert.deepEqual(
+      new Set(items.find((item) => item.id === node.id)?.memberIds),
+      new Set(["rafi", "samira"]),
+    );
+  }
+  assert.deepEqual(
+    new Set(items.find((item) => item.id === workspace.id)?.memberIds),
+    new Set(["nadia", "rafi", "samira"]),
+  );
+  assert.deepEqual(items.find((item) => item.id === sibling.id)?.memberIds, []);
+  assert.deepEqual(items.find((item) => item.id === other.id)?.memberIds, ["samira"]);
+  useTaskStore
+    .getState()
+    .save(sibling.id, { ...newTaskFields("To Do"), title: "Review", assignedTo: "Rafi Islam" });
+  board.remove(project, "DELETE");
+  assert.deepEqual(
+    useBoardStore.getState().items.find((item) => item.id === workspace.id)?.memberIds,
+    ["nadia"],
+  );
 });
 
-test("assignments use the latest workspace roster even when the member dialog is already open", async () => {
+test("inherited membership includes older child assignments and keeps independent workspace members", async () => {
   const board = useBoardStore.getState();
   const workspace = await board.add("Studio", "office", null);
   const department = await board.add("Art", "school", workspace.id);
-  assert.throws(() => board.addMembers(department.id, ["rafi"]), /roster/i);
-  board.addMembers(workspace.id, ["rafi"]);
+  storage.setItem(
+    itemPrefix + department.id,
+    JSON.stringify({ ...department, memberIds: ["rafi"] }),
+  );
   storage.setItem(
     itemPrefix + workspace.id,
     JSON.stringify({ ...workspace, memberIds: ["nadia"] }),
   );
-  assert.throws(() => board.addMembers(department.id, ["rafi", "nadia"]), /roster/i);
-  board.addMembers(department.id, ["nadia"]);
-  assert.deepEqual(JSON.parse(storage.getItem(itemPrefix + department.id)!).memberIds, ["nadia"]);
+  board.load();
+  assert.deepEqual(useBoardStore.getState().items.find((i) => i.id === workspace.id)?.memberIds, [
+    "nadia",
+    "rafi",
+  ]);
+  await board.addMembers(department.id, ["samira"]);
+  assert.deepEqual(JSON.parse(storage.getItem(itemPrefix + department.id)!).memberIds, [
+    "rafi",
+    "samira",
+  ]);
+  assert.deepEqual(useBoardStore.getState().items.find((i) => i.id === workspace.id)?.memberIds, [
+    "nadia",
+    "rafi",
+    "samira",
+  ]);
 });
 
 test("pin color survives reload and rejects invalid colors and stale edits", async () => {
@@ -231,8 +413,8 @@ test("both task assignment fields use the current workspace roster, including at
   const board = useBoardStore.getState();
   const workspace = await board.add("Studio", "office", null);
   const other = await board.add("Other studio", "office", null);
-  board.addMembers(workspace.id, ["nadia", "rafi"]);
-  board.addMembers(other.id, ["samira"]);
+  await board.addMembers(workspace.id, ["nadia", "rafi"]);
+  await board.addMembers(other.id, ["samira"]);
   const department = await board.add("Art", "office", workspace.id);
   const project = await board.add("Pilot", "office", department.id);
   const section = await board.add("Review", "office", project.id);
@@ -297,15 +479,16 @@ test("a stale editor cannot overwrite a pin renamed in another tab", () => {
   assert.equal(JSON.parse(storage.getItem(itemPrefix + "root")!).title, "Changed elsewhere");
 });
 
-test("member assignment merges the latest assignments and survives reload", () => {
+test("member assignment merges the latest assignments and survives reload", async () => {
   seed();
   storage.setItem(itemPrefix + "root", JSON.stringify({ ...pin("root"), memberIds: ["nadia"] }));
-  useBoardStore.getState().addMembers("root", ["ayesha", "ayesha", "rafi"]);
+  await useBoardStore.getState().addMembers("root", ["ayesha", "ayesha", "rafi"]);
   useBoardStore.getState().load();
   assert.deepEqual(useBoardStore.getState().items.find((item) => item.id === "root")?.memberIds, [
     "nadia",
     "ayesha",
     "rafi",
+    "tanvir",
   ]);
 });
 
@@ -377,11 +560,66 @@ test("a failed save does not claim to update the in-memory pin", () => {
   assert.equal(useBoardStore.getState().items.find((item) => item.id === "root")?.title, "root");
 });
 
-test("adding an assigned member immediately restores a filtered pin without reloading", () => {
+test("adding an assigned member immediately restores a filtered pin without reloading", async () => {
   seed();
   const before = useBoardStore.getState().items.find((item) => item.id === "root")!;
   assert.equal(members.pinMatchesMember(before, "nadia"), false);
-  useBoardStore.getState().addMembers("root", ["nadia"]);
+  await useBoardStore.getState().addMembers("root", ["nadia"]);
   const after = useBoardStore.getState().items.find((item) => item.id === "root")!;
   assert.equal(members.pinMatchesMember(after, "nadia"), true);
+});
+
+test("activity records committed changes in order, attributes the actor, and preserves historical workspace scope", async () => {
+  setActorRole("Admin");
+  const board = useBoardStore.getState();
+  const studio = await board.add("Studio", "office", null);
+  const school = await board.add("School", "school", null);
+  const section = await board.add("Review", "office", studio.id);
+  await board.addMembers(section.id, ["nadia", "ayesha"]);
+  await board.addMembers(school.id, ["nadia"]);
+  await board.endBranch(section.id);
+  const tasks = useTaskStore.getState();
+  tasks.save(section.id, {
+    ...newTaskFields("To Do"),
+    title: "Layout",
+    assignedTo: "Nadia Ahmed",
+    assignedBy: "Nadia Ahmed",
+  });
+  const task = useTaskStore.getState().tasks[0];
+  tasks.move(task.id, "Approved");
+  await useAttendanceStore.getState().save("nadia", "2026-11-14", { status: "Late" });
+  await useAttendanceStore.getState().save("nadia", "2026-11-14", { note: "Personal details" });
+  await useWorkHoursStore.getState().save("nadia", sampleWeek);
+  const entries = readActivity();
+  assert.equal(entries.length, 11);
+  assert.deepEqual(
+    entries.slice(0, 4).map((e) => e.area),
+    ["Work Hours", "Attendance", "Attendance", "Tasks"],
+  );
+  assert.ok(entries.every((e) => e.actorId === "ayesha" && e.actorName === "Ayesha Rahman"));
+  assert.equal(entries[3].detail, "To Do → Approved");
+  assert.equal(JSON.stringify(entries).includes("Personal details"), false);
+  assert.deepEqual(filterActivity(entries, undefined, "nadia"), []);
+  assert.equal(filterActivity(entries, studio.id, "ayesha").length, 9);
+  assert.equal(filterActivity(entries, school.id).length, 5);
+  tasks.move(task.id, "Approved");
+  await board.addMembers(section.id, ["nadia"]);
+  await useAttendanceStore.getState().save("nadia", "2026-11-14", { status: "Late" });
+  await useWorkHoursStore
+    .getState()
+    .save("nadia", sampleWeek, useWorkHoursStore.getState().routines.get("nadia"));
+  assert.deepEqual(readActivity(), entries);
+  assert.throws(() =>
+    withActivity({ area: "Board", description: "Failed change", workspaces: [] }, () => {
+      throw Error("Save failed");
+    }),
+  );
+  assert.deepEqual(readActivity(), entries);
+  board.update(studio, "Renamed studio", studio.icon);
+  const renamed = useBoardStore.getState().items.find((item) => item.id === studio.id)!;
+  board.remove(renamed, "DELETE");
+  const after = filterActivity(readActivity(), studio.id);
+  assert.match(after[0].description, /Deleted workspace “Renamed studio”/);
+  assert.equal(after[0].detail, "Also removed 1 nested section and 1 task");
+  assert.equal(after.at(-1)?.workspaces[0].title, "Studio");
 });

@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { Icon } from "@/components/ui/icon";
 import { ShellIcon } from "@/components/ui/shell-icon";
-import { sections } from "@/lib/navigation";
+import { sectionHref, sectionIcon, sections } from "@/lib/navigation";
 
 export function Sidebar({
   active,
@@ -43,13 +43,13 @@ export function Sidebar({
           {sections.map(({ id, label }) => (
             <a
               key={id}
-              href={id === "workspace" ? "#/" : `#/tool/${id}`}
+              href={sectionHref(id)}
               className="nav-link"
               aria-current={active === id ? "page" : undefined}
               onClick={onClose}
               title={id === "workspace" ? "Board" : label}
             >
-              <ShellIcon name={id === "workspace" ? "board" : id} />
+              <ShellIcon name={sectionIcon(id)} />
               <span>{id === "workspace" ? "Board" : label}</span>
             </a>
           ))}

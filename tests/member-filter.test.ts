@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as members from "../src/lib/members.ts";
 import * as workspaces from "../src/lib/workspaces.ts";
-import { memberTasksHref, parseBoardRoute, resolveNodeRoute } from "../src/lib/board-route.ts";
+import {
+  memberTasksHref,
+  parseBoardRoute,
+  resolveNodeRoute,
+  sectionTasksHref,
+} from "../src/lib/board-route.ts";
 
 function boardHref(items: workspaces.BoardItem[], id: string) {
   return (
@@ -34,6 +39,33 @@ test("a member's task view keeps the board it was opened from", () => {
 test("clearing the member selection restores every pin, including unassigned pins", () => {
   for (const pin of [{}, { memberIds: [] }, { memberIds: ["nadia"] }])
     assert.equal(members.pinMatchesMember(pin, null), true);
+});
+
+test("member task destinations include open sections and use workspace membership at every depth", () => {
+  const pin = (id: string, parentId: string | null, memberIds: string[]): workspaces.BoardItem => ({
+    id,
+    parentId,
+    title: id,
+    memberIds,
+    createdAt: 1,
+    icon: "office",
+  });
+  const byId = workspaces.indexBoardItems([
+    pin("Studio", null, ["nadia"]),
+    pin("Art", "Studio", []),
+    pin("Review", "Art", []),
+    pin("School", null, []),
+    pin("Lessons", "School", ["nadia"]),
+    pin("Missing", "gone", ["nadia"]),
+  ]).byId;
+  const nadia = members.demoMembers.find((member) => member.id === "nadia")!;
+  assert.deepEqual(
+    members.memberTaskDestinations(nadia, byId).map((s) => s.label),
+    ["Studio", "Studio / Art", "Studio / Art / Review"],
+  );
+  const route = parseBoardRoute(sectionTasksHref("#/section/Art"));
+  assert.deepEqual(route, { kind: "node", id: "Art", workspace: false, view: "tasks" });
+  assert.equal(resolveNodeRoute(route, byId).at(-1)?.item.id, "Art");
 });
 
 test("a member task links to the correct nested section board", () => {

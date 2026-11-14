@@ -7,9 +7,18 @@ export const sections = [
   { id: "gantt", label: "Gantt Chart" },
   { id: "dashboard", label: "Dashboard" },
   { id: "analytics", label: "Analytics" },
-  { id: "assistant", label: "Assistant" },
   { id: "attendance", label: "Attendance" },
   { id: "hours", label: "Work Hours" },
   { id: "activity", label: "Activity log" },
   { id: "members", label: "Members" },
 ] as const satisfies ReadonlyArray<{ id: InterfaceIcon; label: string }>;
+
+export const profileSection = { id: "profile", label: "My Profile" } as const;
+
+export function sectionIcon(id: (typeof sections)[number]["id"]) {
+  return id === "workspace" ? "board" : id;
+}
+
+export function sectionHref(id: (typeof sections)[number]["id"] | typeof profileSection.id) {
+  return id === "workspace" ? "#/" : `#/tool/${id}`;
+}

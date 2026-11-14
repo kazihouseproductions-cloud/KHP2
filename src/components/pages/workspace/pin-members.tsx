@@ -2,7 +2,8 @@ import { useState, type FormEvent } from "react";
 import { Modal } from "@/components/common/modal";
 import { Icon } from "@/components/ui/icon";
 import { MemberAvatar } from "@/components/ui/member-avatar";
-import { demoMembers, getAssignableMembers, getPinMemberIds } from "@/lib/members";
+import { useMemberDirectory } from "@/stores/member-store";
+import { getPinMemberIds } from "@/lib/members";
 import type { BoardItem } from "@/lib/workspaces";
 import { useBoardStore } from "@/stores/board-store";
 
@@ -15,10 +16,11 @@ export function PinMembers({
   onAdd: () => void;
   onClose: () => void;
 }) {
+  const directory = useMemberDirectory();
   const [search, setSearch] = useState("");
-  const assigned = demoMembers.filter((member) => getPinMemberIds(item).includes(member.id));
+  const assigned = directory.filter((member) => getPinMemberIds(item).includes(member.id));
   const visible = assigned.filter((member) =>
-    `${member.name} ${member.role}`.toLowerCase().includes(search.toLowerCase().trim()),
+    `${member.name} ${member.role} ${member.jobTitle ?? ""}`.toLowerCase().includes(search.toLowerCase().trim()),
   );
   return (
     <>
@@ -46,7 +48,7 @@ export function PinMembers({
             <MemberAvatar member={member} />
             <span>
               <strong>{member.name}</strong>
-              <small>{member.role}</small>
+              <small>{member.jobTitle ?? member.role}</small>
             </span>
           </li>
         ))}
@@ -57,7 +59,6 @@ export function PinMembers({
         </p>
       )}
       <footer className="member-panel-footer">
-        <span>Sample members</span>
         <button type="button" onClick={onAdd}>
           <Icon name="plus" size={15} /> Add Member
         </button>
@@ -75,29 +76,29 @@ export function AddPinMembers({
   onClose: () => void;
   afterCreate?: boolean;
 }) {
+  const directory = useMemberDirectory();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const addMembers = useBoardStore((state) => state.addMembers);
   const items = useBoardStore((state) => state.items);
-  const findItem = (id: string) => items.find((entry) => entry.id === id);
-  const current = findItem(item.id) ?? item;
+  const current = items.find((entry) => entry.id === item.id) ?? item;
   const assigned = getPinMemberIds(current);
-  const roster = getAssignableMembers(current, findItem);
-  const pending = selected.filter(
-    (id) => !assigned.includes(id) && roster.some((member) => member.id === id),
+  const pending = selected.filter((id) => !assigned.includes(id));
+  const visible = directory.filter((member) =>
+    `${member.name} ${member.role} ${member.jobTitle ?? ""}`.toLowerCase().includes(search.toLowerCase().trim()),
   );
-  const visible = roster.filter((member) =>
-    `${member.name} ${member.role}`.toLowerCase().includes(search.toLowerCase().trim()),
-  );
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!pending.length) return;
+    if (!pending.length || saving) return;
+    setSaving(true);
     try {
-      addMembers(item.id, pending);
+      await addMembers(item.id, pending);
       onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to add members.");
+      setSaving(false);
     }
   }
   return (
@@ -109,16 +110,16 @@ export function AddPinMembers({
       <form onSubmit={submit}>
         <p className="mb-4 break-words text-sm text-neutral-600">
           Choose members for <strong>{current.title}</strong>.
+          {current.parentId !== null &&
+            " They will also appear in each parent section and the workspace."}
         </p>
-        {roster.length > 0 && (
-          <input
-            className="member-search"
-            aria-label="Search members"
-            placeholder="Search by name or role…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        )}
+        <input
+          className="member-search"
+          aria-label="Search members"
+          placeholder="Search by name or role…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
         <fieldset className="member-picker">
           <legend className="sr-only">Select members</legend>
           {visible.map((member) => {
@@ -139,17 +140,13 @@ export function AddPinMembers({
                 <MemberAvatar member={member} />
                 <span>
                   <strong>{member.name}</strong>
-                  <small>{member.role}</small>
+                  <small>{member.jobTitle ?? member.role}</small>
                 </span>
                 {alreadyAssigned && <span className="member-assigned">Added</span>}
               </label>
             );
           })}
-          {!visible.length && (
-            <p className="member-empty">
-              {roster.length ? "No matching members." : "This workspace has no members yet."}
-            </p>
-          )}
+          {!visible.length && <p className="member-empty">No matching members.</p>}
         </fieldset>
         {error && (
           <p role="alert" className="my-3 text-sm text-red-700">
@@ -162,7 +159,7 @@ export function AddPinMembers({
             <button type="button" className="secondary-button" onClick={onClose}>
               {afterCreate ? "Skip" : "Cancel"}
             </button>
-            <button type="submit" className="primary-button" disabled={!pending.length}>
+            <button type="submit" className="primary-button" disabled={!pending.length || saving}>
               Add members
             </button>
           </div>

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { attendanceId, type AttendanceEntry } from "../src/lib/attendance.ts";
 import { taskChange, type HistoryEntry } from "../src/lib/task-history.ts";
 import { taskTrends } from "../src/lib/task-trends.ts";
 import type { TaskStatus } from "../src/lib/tasks.ts";
@@ -8,6 +9,14 @@ const state = (assignedTo: string, status: TaskStatus) => ({ assignedTo, status 
 const nadia = state("Nadia Ahmed", "Approved"),
   todo = state(" Nadia Ahmed ", "To Do");
 const rafi = state("Rafi Islam", "Approved");
+function attendance(rows: [AttendanceEntry["memberId"], string, AttendanceEntry["status"]][]) {
+  return new Map(
+    rows.map(([memberId, day, status]) => {
+      const id = attendanceId(memberId, day);
+      return [id, { id, memberId, day, status, note: "", createdAt: 1 }];
+    }),
+  );
+}
 const entry = (id: string, day: number, change: ReturnType<typeof taskChange>): HistoryEntry => ({
   id,
   createdAt: new Date(2026, 10, day, 10).getTime(),
@@ -16,7 +25,8 @@ const entry = (id: string, day: number, change: ReturnType<typeof taskChange>): 
 
 test("unknown dates, recorded zero approvals, and absent scores remain distinct", () => {
   const history = [entry("baseline", 10, taskChange([], [nadia, todo]))];
-  const { days } = taskTrends(history, 3, new Date(2026, 10, 11));
+  const marks = attendance([["nadia", "2026-11-11", "Absent"]]);
+  const { days } = taskTrends(history, 3, new Date(2026, 10, 11), marks);
   assert.deepEqual(
     days.map((d) => d.approvals),
     [null, 0, 0],
@@ -27,7 +37,7 @@ test("unknown dates, recorded zero approvals, and absent scores remain distinct"
   );
   assert.deepEqual(
     days.map((d) => d.scores.get("nadia ahmed")),
-    [undefined, 72, 72],
+    [undefined, null, 25],
   );
   assert.equal(days[2].scores.get("rafi islam"), null);
 });
@@ -41,7 +51,12 @@ test("historical scores survive reopening, transfer, deletion, and window change
     entry("transfer", 4, taskChange([nadia], [rafi])),
     entry("delete", 5, taskChange([nadia, rafi], [])),
   ];
-  const { days } = taskTrends(history, 5, new Date(2026, 10, 5));
+  const marks = attendance([
+    ["nadia", "2026-10-31", "WFH"],
+    ["nadia", "2026-11-03", "Absent"],
+    ["rafi", "2026-11-04", "Late"],
+  ]);
+  const { days } = taskTrends(history, 5, new Date(2026, 10, 5), marks);
   assert.deepEqual(
     days.map((d) => [d.approvals, d.approved, d.total]),
     [
@@ -54,11 +69,11 @@ test("historical scores survive reopening, transfer, deletion, and window change
   );
   assert.deepEqual(
     days.map((d) => d.scores.get("nadia ahmed")),
-    [72, 97, 97, 97, null],
+    [75, 100, 75, 75, null],
   );
   assert.deepEqual(
     days.map((d) => d.scores.get("rafi islam")),
-    [null, null, null, 96, null],
+    [null, null, null, 100, null],
   );
-  assert.deepEqual(taskTrends(history, 2, new Date(2026, 10, 5)).days, days.slice(-2));
+  assert.deepEqual(taskTrends(history, 2, new Date(2026, 10, 5), marks).days, days.slice(-2));
 });

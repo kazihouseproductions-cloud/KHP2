@@ -1,22 +1,49 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useMemberDirectory } from "@/stores/member-store";
 import { createPortal } from "react-dom";
 import { WorkspaceBranch } from "@/components/pages/workspace/workspace-branch";
 import { getWorkspaceMembers } from "@/lib/members";
 import type { Task, TaskStatus } from "@/lib/tasks";
-import type { BoardStep } from "@/lib/workspaces";
+import { type BoardItem, type BoardStep, collectPinIds } from "@/lib/workspaces";
 import { listenToTaskStorage, useTaskStore } from "@/stores/task-store";
 import { TaskColumns } from "./task-columns";
 import { TaskForm } from "./task-form";
 
-export function TaskBoard({ path, sectionId }: { path: BoardStep[]; sectionId: string }) {
-  const tasks = useTaskStore((state) => state.tasks).filter((task) => task.sectionId === sectionId);
+export function TaskBoard({
+  path,
+  items,
+  sectionView = false,
+}: {
+  path: BoardStep[];
+  items: BoardItem[];
+  sectionView?: boolean;
+}) {
+  const directory = useMemberDirectory();
+  const section = path[path.length - 1];
+  const sectionId = section.item.id;
+  const sectionIds = useMemo(
+    () => (sectionView ? collectPinIds(items, sectionId) : new Set([sectionId])),
+    [items, sectionId, sectionView],
+  );
+  const tasks = useTaskStore((state) => state.tasks).filter((task) =>
+    sectionIds.has(task.sectionId),
+  );
   const [form, setForm] = useState<{ status: TaskStatus; task?: Task } | null>(null);
   useEffect(listenToTaskStorage, []);
 
   return (
-    <div className="task-board">
-      <h1 className="sr-only">{path.at(-1)?.item.title} task board</h1>
-      <WorkspaceBranch path={path} endpoint="tasks" />
+    <div className={sectionView ? "member-task-board" : "task-board"}>
+      <header className="mb-4">
+        {sectionView && (
+          <a href={section.href} className="text-xs text-neutral-600 hover:underline">
+            ← Back to {section.item.title}
+          </a>
+        )}
+        <h1 className="mt-1 text-xl font-semibold" aria-label={`${section.item.title} task board`}>
+          {section.item.title}
+        </h1>
+      </header>
+      {!sectionView && <WorkspaceBranch path={path} endpoint="tasks" />}
       <TaskColumns
         tasks={tasks}
         onAdd={(status) => setForm({ status })}
@@ -25,8 +52,8 @@ export function TaskBoard({ path, sectionId }: { path: BoardStep[]; sectionId: s
       {form &&
         createPortal(
           <TaskForm
-            sectionId={sectionId}
-            members={getWorkspaceMembers(path[0]?.item)}
+            sectionId={form.task?.sectionId ?? sectionId}
+            members={getWorkspaceMembers(path[0]?.item, directory)}
             task={form.task}
             status={form.status}
             onClose={() => setForm(null)}

@@ -1,5 +1,12 @@
 import { useEffect, useMemo } from "react";
 import { ScrollArea } from "@/components/common/scroll-area";
+import {
+  WorkspaceMemberFilter,
+  type WorkspaceRoster,
+} from "@/components/common/workspace-member-filter";
+import { attendanceRatesByDay } from "@/lib/member-performance";
+import { useToday } from "@/hooks/use-today";
+import { listenToAttendance, useAttendanceStore } from "@/stores/attendance-store";
 import { Icon } from "@/components/ui/icon";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 import { memberTasksHref } from "@/lib/board-route";
@@ -40,7 +47,13 @@ function StatusCounts({ statuses, total }: Pick<Summary, "statuses" | "total">) 
   );
 }
 
-function MemberCounts({ members, unassigned }: Pick<Summary, "members" | "unassigned">) {
+function MemberCounts({
+  members,
+  unassigned,
+}: {
+  members: Summary["members"];
+  unassigned?: number;
+}) {
   return (
     <section aria-labelledby="member-counts">
       <h2 id="member-counts" className="mb-4 text-lg font-semibold">
@@ -80,34 +93,44 @@ function MemberCounts({ members, unassigned }: Pick<Summary, "members" | "unassi
             </tr>
           ))}
         </tbody>
-        <tfoot>
-          <tr className="text-neutral-600">
-            <th scope="row" className="px-3 py-3 text-left font-normal">
-              Unassigned
-            </th>
-            <td className="px-3 text-right tabular-nums">{number.format(unassigned)}</td>
-          </tr>
-        </tfoot>
+        {unassigned !== undefined && (
+          <tfoot>
+            <tr className="text-neutral-600">
+              <th scope="row" className="px-3 py-3 text-left font-normal">
+                Unassigned
+              </th>
+              <td className="px-3 text-right tabular-nums">{number.format(unassigned)}</td>
+            </tr>
+          </tfoot>
+        )}
       </table>
     </section>
   );
 }
 
-export function TaskDashboard() {
+export function TaskDashboard({ roster }: { roster: WorkspaceRoster }) {
   const tasks = useTaskStore((state) => state.tasks);
+  const entries = useAttendanceStore((s) => s.entries);
+  const today = useToday();
   useEffect(listenToTaskStorage, []);
-  const summary = useMemo(() => summarizeTasks(tasks), [tasks]);
+  useEffect(listenToAttendance, []);
+  const rates = useMemo(() => attendanceRatesByDay(entries, [today]).get(today), [entries, today]);
+  const summary = useMemo(() => summarizeTasks(tasks, roster.directory), [tasks, roster.directory]);
+  const members = roster.workspace
+    ? summary.members.filter((row) => roster.members.some((m) => m.id === row.member?.id))
+    : summary.members;
   return (
     <div className="task-tool">
       <ScrollArea
         label="Dashboard"
         className="@container min-h-0 flex-1 overflow-y-auto px-1 pb-24"
       >
-        <header className="flex items-end justify-between gap-4 border-b border-neutral-200 pb-5">
+        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-neutral-200 pb-5">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Task overview</h1>
             <p className="mt-1 text-sm text-neutral-600">Across all workspaces</p>
           </div>
+          <WorkspaceMemberFilter roster={roster} />
           <p className="shrink-0 text-right">
             <span className="block text-3xl leading-none font-semibold tabular-nums">
               {number.format(summary.total)}
@@ -122,9 +145,15 @@ export function TaskDashboard() {
         )}
         <div className="mt-7 grid items-start gap-8 @3xl:grid-cols-2 @3xl:gap-12">
           <StatusCounts statuses={summary.statuses} total={summary.total} />
-          <MemberCounts members={summary.members} unassigned={summary.unassigned} />
+          <MemberCounts
+            members={members}
+            unassigned={roster.workspace ? undefined : summary.unassigned}
+          />
         </div>
-        <MemberPerformanceTable members={summary.members} />
+        {!members.length && (
+          <p className="mt-4 text-sm text-neutral-600">No members in this workspace yet.</p>
+        )}
+        <MemberPerformanceTable members={members} rates={rates} />
       </ScrollArea>
     </div>
   );

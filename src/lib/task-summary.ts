@@ -1,12 +1,12 @@
-import { demoMembers, type DemoMember, memberNameKey } from "./members";
+import { demoMembers, type Member, memberNameKey } from "./members";
 import { taskStatuses, type Task, type TaskStatus } from "./tasks";
 
-export type MemberCount = { name: string; member?: DemoMember; count: number; approved: number };
+export type MemberCount = { name: string; member?: Member; count: number; approved: number };
 
-export function summarizeTasks(tasks: readonly Task[]) {
+export function summarizeTasks(tasks: readonly Task[], directory: readonly Member[] = demoMembers) {
   const statuses = new Map<TaskStatus, number>();
   const members = new Map<string, MemberCount>(
-    demoMembers.map((member) => [
+    directory.map((member) => [
       memberNameKey(member.name),
       { name: member.name, member, count: 0, approved: 0 },
     ]),

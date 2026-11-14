@@ -22,7 +22,7 @@ export function dayKey(day: Date) {
     .join("-");
 }
 
-function addDays(day: Date, count: number) {
+export function addDays(day: Date, count: number) {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate() + count, 12);
 }
 
@@ -55,7 +55,7 @@ export function periodLabel(date: Date, view: CalendarView) {
   return weekLabel.formatRange(days[0], days[6]);
 }
 
-function usableDate(key: string) {
+export function usableDate(key: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(key) && dayKey(new Date(`${key}T12:00:00`)) === key;
 }
 

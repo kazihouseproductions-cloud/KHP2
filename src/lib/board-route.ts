@@ -4,16 +4,33 @@ export type BoardRoute =
   | { kind: "home"; tasksFor?: string }
   | { kind: "invalid" }
   | { kind: "tool"; name: string }
-  | { kind: "node"; id: string; workspace: boolean; legacyIds?: string[]; tasksFor?: string };
+  | {
+      kind: "node";
+      id: string;
+      workspace: boolean;
+      legacyIds?: string[];
+      tasksFor?: string;
+      view?: "tasks";
+    };
 
 export function memberTasksHref(boardHref: string, memberId: string) {
   return `${boardHref}?tasksFor=${encodeURIComponent(memberId)}`;
 }
 
+export function sectionTasksHref(boardHref: string) {
+  return `${boardHref}?view=tasks`;
+}
+
 export function parseBoardRoute(hash: string): BoardRoute {
   const [path, query] = hash.slice(1).split("?");
   const route = parsePath(path);
-  const memberId = new URLSearchParams(query).get("tasksFor");
+  const params = new URLSearchParams(query);
+  const memberId = params.get("tasksFor");
+  if (params.get("view") === "tasks") {
+    return route.kind === "node" && memberId === null
+      ? { ...route, view: "tasks" }
+      : { kind: "invalid" };
+  }
   if (memberId === null) return route;
   return memberId && (route.kind === "node" || route.kind === "home")
     ? { ...route, tasksFor: memberId }

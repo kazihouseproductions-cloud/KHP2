@@ -1,22 +1,31 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import { ShellIcon } from "@/components/ui/shell-icon";
-import { previewMember } from "@/lib/members";
-import { sections } from "@/lib/navigation";
+import { MemberAvatar } from "@/components/ui/member-avatar";
+import type { Member } from "@/lib/members";
+import { sectionHref, sectionIcon, sections } from "@/lib/navigation";
+import { WorkspaceSearch, type WorkspaceSearchProps } from "./workspace-search";
+import { WorkspaceChat } from "@/components/pages/chat/workspace-chat";
+import { NotificationPanel } from "./notification-panel";
+import { useNotifications } from "@/hooks/use-notifications";
 
-type Panel = "Account" | "Notifications" | "Apps" | "Chat";
+type Panel = "Notifications" | "Apps" | "Chat";
 
-const panelMessages: Record<Panel, string> = {
-  Account: "You are using a local workspace.",
-  Notifications: "No notifications.",
-  Apps: "Workspace tools",
-  Chat: "Messaging is not connected.",
-};
-
-export function WorkspaceUtilities() {
+export function WorkspaceUtilities({
+  member,
+  ...search
+}: { member: Member } & WorkspaceSearchProps) {
   const [panel, setPanel] = useState<Panel | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
+  const chatTrigger = useRef<HTMLButtonElement>(null);
+  const notificationState = useNotifications(member.id);
+  const unreadCount = notificationState.unreadIds.length;
+
+  function closePanel() {
+    setPanel(null);
+    trigger.current?.focus();
+  }
 
   useEffect(() => {
     if (!panel) return;
@@ -54,15 +63,34 @@ export function WorkspaceUtilities() {
   return (
     <div ref={container}>
       <div className="account-pill">
-        <button type="button" className="account-name" {...props("Account")}>
-          <ShellIcon name="account" size={30} />
-          <span>{previewMember.name}</span>
+        <WorkspaceSearch {...search} onOpen={() => setPanel(null)} />
+        <a
+          className="account-name"
+          href={sectionHref("profile")}
+          aria-label={member.name}
+          title="My Profile"
+          onClick={() => setPanel(null)}
+        >
+          {member.photo ? <MemberAvatar member={member} /> : <Icon name="account" size={22} />}
+          <span className="account-label">{member.name}</span>
+        </a>
+        <button ref={chatTrigger} type="button" className="icon-action" {...props("Chat")}>
+          <Icon name="chat" size={22} />
         </button>
-        <button type="button" className="icon-action" {...props("Chat")}>
-          <ShellIcon name="chat" size={27} />
-        </button>
-        <button type="button" className="icon-action" {...props("Notifications")}>
-          <ShellIcon name="bell" size={30} />
+        <button
+          type="button"
+          className="icon-action relative"
+          {...props("Notifications")}
+          aria-description={
+            unreadCount ? `${unreadCount} unread notifications` : "All notifications are read"
+          }
+        >
+          <Icon name="bell" size={22} />
+          {unreadCount > 0 && (
+            <span aria-hidden="true" className="notification-badge">
+              {unreadCount}
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -71,14 +99,28 @@ export function WorkspaceUtilities() {
           title="Sign out is unavailable in local mode"
           disabled
         >
-          <ShellIcon name="logout" size={30} />
+          <Icon name="logout" size={22} />
         </button>
       </div>
       <button type="button" className="utility-circle apps-button" {...props("Apps")}>
         <ShellIcon name="apps" size={29} />
         <span>Apps</span>
       </button>
-      {panel && (
+      <WorkspaceChat
+        account={member}
+        members={search.members}
+        inboxOpen={panel === "Chat"}
+        showInbox={() => {
+          trigger.current = chatTrigger.current;
+          setPanel("Chat");
+        }}
+        hideInbox={() => setPanel(null)}
+        focusTrigger={() => chatTrigger.current?.focus()}
+      />
+      {panel === "Notifications" && (
+        <NotificationPanel {...notificationState} onClose={closePanel} />
+      )}
+      {panel === "Apps" && (
         <section
           id="utility-panel"
           aria-label={panel}
@@ -90,30 +132,19 @@ export function WorkspaceUtilities() {
               type="button"
               className="icon-action"
               aria-label={`Close ${panel.toLowerCase()}`}
-              onClick={() => {
-                setPanel(null);
-                trigger.current?.focus();
-              }}
+              onClick={closePanel}
             >
               <Icon name="close" size={16} />
             </button>
           </header>
-          {panel === "Apps" ? (
-            <nav aria-label="Workspace apps" className="apps-menu">
-              {sections.map(({ id, label }) => (
-                <a
-                  key={id}
-                  href={id === "workspace" ? "#/" : `#/tool/${id}`}
-                  onClick={() => setPanel(null)}
-                >
-                  <ShellIcon name={id === "workspace" ? "board" : id} />
-                  <span>{id === "workspace" ? "Board" : label}</span>
-                </a>
-              ))}
-            </nav>
-          ) : (
-            <p className="text-sm text-neutral-600">{panelMessages[panel]}</p>
-          )}
+          <nav aria-label="Workspace apps" className="apps-menu">
+            {sections.map(({ id, label }) => (
+              <a key={id} href={sectionHref(id)} onClick={() => setPanel(null)}>
+                <ShellIcon name={sectionIcon(id)} />
+                <span>{id === "workspace" ? "Board" : label}</span>
+              </a>
+            ))}
+          </nav>
         </section>
       )}
     </div>

@@ -2,6 +2,7 @@ import { type CSSProperties, useState } from "react";
 import { nodeHref, type BoardItem, type BoardStep } from "@/lib/workspaces";
 import { useBoardStore } from "@/stores/board-store";
 import { AddPin, BoardPin } from "./board-pin";
+import { SectionTasksLink } from "./section-tasks-link";
 import { WorkspaceBranch } from "./workspace-branch";
 
 function orbitPosition(index: number, total: number): CSSProperties {
@@ -57,10 +58,11 @@ export function BoardCanvas({
   const extraPairs = Math.max(0, Math.ceil((items.length - 8) / 2));
   return (
     <div className="board-origin" style={{ "--extra-pairs": extraPairs } as CSSProperties}>
-      <div className="board-hub">
+      <div className="board-hub text-center">
         <h1 className="board-title" style={{ color: current?.item.color }}>
           {current?.item.title ?? "Workspace"}
         </h1>
+        {current && <SectionTasksLink boardHref={current.href} />}
         <WorkspaceBranch path={path} endpoint={items.length < 3 ? "title" : "ring"} />
       </div>
       {items.map((item, index) => (

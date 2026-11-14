@@ -8,7 +8,7 @@ import {
   weekDays,
   weekdays,
 } from "@/lib/calendar";
-import { demoMembers } from "@/lib/members";
+import { useMemberDirectory } from "@/stores/member-store";
 import type { Task } from "@/lib/tasks";
 
 export function CalendarTask({
@@ -18,7 +18,8 @@ export function CalendarTask({
   entry: CalendarEntry;
   onEdit: (task: Task) => void;
 }) {
-  const member = demoMembers.find(
+  const directory = useMemberDirectory();
+  const member = directory.find(
     (person) => person.name.toLowerCase() === task.assignedTo.trim().toLowerCase(),
   );
   const label = `${due ? "Due: " : ""}${task.title} · ${task.assignedTo || "Unassigned"}`;

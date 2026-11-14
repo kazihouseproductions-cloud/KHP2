@@ -7,23 +7,26 @@ const percent = new Intl.NumberFormat("en", {
   maximumFractionDigits: 1,
 });
 
-export function MemberPerformanceTable({ members }: { members: readonly MemberCount[] }) {
+export function MemberPerformanceTable({
+  members,
+  rates,
+}: {
+  members: readonly MemberCount[];
+  rates: ReadonlyMap<string, number> | undefined;
+}) {
   return (
     <section
       aria-labelledby="performance-heading"
       className="mt-8 border-t border-neutral-200 pt-6"
     >
-      <div className="flex flex-wrap items-center gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
         <h2 id="performance-heading" className="text-lg font-semibold">
           Performance
         </h2>
-        <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs text-sky-900">
-          Sample attendance
-        </span>
       </div>
       <p id="performance-formula" className="mt-1 mb-4 text-sm text-neutral-600">
-        The score averages two percentages equally: the share of assigned tasks marked Approved and
-        the member’s sample attendance.
+        Performance averages the task approval rate and attendance rate through today. Present, Late
+        and WFH count as attended. Absent counts as missed. Leave and unmarked days are excluded.
       </p>
       <table
         aria-labelledby="performance-heading"
@@ -48,7 +51,7 @@ export function MemberPerformanceTable({ members }: { members: readonly MemberCo
         </thead>
         <tbody className="tabular-nums">
           {members.map((row) => {
-            const { approval, attendance, score } = memberPerformance(row);
+            const { approval, attendance, score } = memberPerformance(row, rates);
             return (
               <tr key={row.name} className="border-b border-neutral-200">
                 <th scope="row" className="break-words px-1.5 py-3 text-left font-medium sm:px-3">

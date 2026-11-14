@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { ScrollArea } from "@/components/common/scroll-area";
-import { dayKey } from "@/lib/calendar";
+import {
+  WorkspaceMemberFilter,
+  type WorkspaceRoster,
+} from "@/components/common/workspace-member-filter";
+import { memberNameKey } from "@/lib/members";
+import { useToday } from "@/hooks/use-today";
+import { listenToAttendance, useAttendanceStore } from "@/stores/attendance-store";
 import { listenToHistory, type HistoryEntry } from "@/lib/task-history";
 import { taskTrends } from "@/lib/task-trends";
 import { dateLabel, decimal, scoreLabel, TrendChart } from "./trend-chart";
@@ -67,7 +73,7 @@ function TrendPanels({ trends }: { trends: Trends }) {
     members.find((m) => m.key === choice) ??
     members.find((m) => latest.scores.get(m.key) != null) ??
     members[0];
-  const score = latest.scores.get(selected.key);
+  const score = selected && latest.scores.get(selected.key);
   return (
     <>
       <div className="mt-6 grid gap-5 @3xl:grid-cols-2">
@@ -104,10 +110,12 @@ function TrendPanels({ trends }: { trends: Trends }) {
             </h2>
             <select
               aria-label="Member for performance trend"
-              value={selected.key}
+              value={selected?.key ?? ""}
+              disabled={!selected}
               onChange={(e) => setChoice(e.target.value)}
               className="max-w-full rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs"
             >
+              {!selected && <option value="">No members</option>}
               {members.map((m) => (
                 <option key={m.key} value={m.key}>
                   {m.name}
@@ -118,15 +126,21 @@ function TrendPanels({ trends }: { trends: Trends }) {
           <p className="mt-2 text-3xl font-medium tabular-nums">
             {score == null ? "Not scored" : scoreLabel(score)}
           </p>
-          <p className="mt-1 mb-4 text-sm text-neutral-600">Latest score · {selected.name}</p>
+          <p className="mt-1 mb-4 text-sm text-neutral-600">
+            {selected ? `Latest score · ${selected.name}` : "No members in this workspace yet."}
+          </p>
           <div className="mt-auto">
             <TrendChart
               kind="score"
-              points={days.map((d) => ({ day: d.day, value: d.scores.get(selected.key) ?? null }))}
+              points={days.map((d) => ({
+                day: d.day,
+                value: (selected && d.scores.get(selected.key)) ?? null,
+              }))}
             />
           </div>
           <p className="mt-3 text-xs text-neutral-600">
-            Daily score: 50% approval rate and 50% sample attendance. Gaps mean no score.
+            Each day’s score averages the approval and attendance rates through that date. A score
+            needs assigned tasks and at least one counted attendance day.
           </p>
         </section>
       </div>
@@ -140,7 +154,7 @@ function TrendPanels({ trends }: { trends: Trends }) {
               </th>
               <th scope="col">Approvals</th>
               <th scope="col">Approved / total</th>
-              <th scope="col">{selected.name}</th>
+              <th scope="col">{selected?.name ?? "Score"}</th>
             </tr>
           </thead>
           <tbody>
@@ -151,7 +165,7 @@ function TrendPanels({ trends }: { trends: Trends }) {
                 </th>
                 <td>{d.approvals ?? "—"}</td>
                 <td>{d.total === null ? "—" : `${d.approved} / ${d.total}`}</td>
-                <td>{scoreLabel(d.scores.get(selected.key))}</td>
+                <td>{scoreLabel(selected && d.scores.get(selected.key))}</td>
               </tr>
             ))}
           </tbody>
@@ -162,25 +176,18 @@ function TrendPanels({ trends }: { trends: Trends }) {
   );
 }
 
-export function TaskAnalytics() {
+export function TaskAnalytics({ roster }: { roster: WorkspaceRoster }) {
   const [history, setHistory] = useState<HistoryEntry[] | null>();
   const [length, setLength] = useState(7);
-  const [today, setToday] = useState(() => dayKey(new Date()));
+  const today = useToday();
+  const entries = useAttendanceStore((s) => s.entries);
   useEffect(() => listenToHistory(setHistory), []);
-  useEffect(() => {
-    const refresh = () => setToday(dayKey(new Date()));
-    const tomorrow = new Date(`${today}T00:00:00`);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const timer = window.setTimeout(refresh, Math.max(0, tomorrow.getTime() - Date.now()));
-    window.addEventListener("focus", refresh);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("focus", refresh);
-    };
-  }, [today]);
+  useEffect(listenToAttendance, []);
   const trends = useMemo(
-    () => history && taskTrends(history, length, new Date(`${today}T12:00:00`)),
-    [history, length, today],
+    () =>
+      history &&
+      taskTrends(history, length, new Date(`${today}T12:00:00`), entries, roster.directory),
+    [history, length, today, entries, roster.directory],
   );
   return (
     <div className="task-tool">
@@ -193,6 +200,7 @@ export function TaskAnalytics() {
             <h1 className="text-2xl font-semibold tracking-tight">Task trends</h1>
             <p className="mt-1 text-sm text-neutral-600">Across all workspaces</p>
           </div>
+          <WorkspaceMemberFilter roster={roster} />
           <fieldset aria-label="Time range" className="flex gap-1 rounded-full bg-neutral-100 p-1">
             {[7, 30, 90].map((n) => (
               <button
@@ -217,7 +225,18 @@ export function TaskAnalytics() {
               in this browser. Existing tasks set the starting totals; earlier dates have no
               history.
             </p>
-            <TrendPanels trends={trends} />
+            <TrendPanels
+              trends={
+                roster.workspace
+                  ? {
+                      ...trends,
+                      members: trends.members.filter((row) =>
+                        roster.members.some((m) => memberNameKey(m.name) === row.key),
+                      ),
+                    }
+                  : trends
+              }
+            />
           </>
         ) : (
           <p className="mt-5 text-sm text-neutral-600">

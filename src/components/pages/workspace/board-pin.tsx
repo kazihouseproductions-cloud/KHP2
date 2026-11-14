@@ -3,7 +3,8 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@/components/ui/icon";
 import { WorkspaceGlyph } from "@/components/ui/workspace-glyph";
-import { demoMembers, pinMatchesMember } from "@/lib/members";
+import { useMemberDirectory } from "@/stores/member-store";
+import { pinMatchesMember } from "@/lib/members";
 import type { BoardItem } from "@/lib/workspaces";
 import { useBoardViewStore } from "@/stores/board-view-store";
 import { DeletePinDialog } from "./delete-pin-dialog";
@@ -22,7 +23,8 @@ export function BoardPin({
 }) {
   const memberId = useBoardViewStore((state) => state.memberId);
   const dimmed = !pinMatchesMember(item, memberId);
-  const member = demoMembers.find((entry) => entry.id === memberId);
+  const directory = useMemberDirectory();
+  const member = directory.find((entry) => entry.id === memberId);
   const trigger = useRef<HTMLButtonElement>(null);
   const id = useId();
   const [panel, setPanel] = useState<"menu" | "members" | null>(null);
