@@ -1,0 +1,18 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="36" height="15" viewBox="0 0 36 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Slip Tool">
+<rect id="Rectangle 31" x="8.5" y="0.5" width="14" height="14" rx="0.5" fill="black" stroke="black"/>
+<rect id="Rectangle 32" x="0.5" y="0.5" width="35" height="14" rx="0.5" stroke="black"/>
+<path id="Vector 54" d="M3.5 0.5L0.5 5" stroke="black"/>
+<path id="Vector 59" d="M25 0.5L22 4.5" stroke="black"/>
+<path id="Vector 64" d="M35.5 9.5L31.5 14.5" stroke="black"/>
+<path id="Vector 58" d="M10 10L7 14.5" stroke="black"/>
+<path id="Vector 60" d="M35.5 5L28 14.5" stroke="black"/>
+<path id="Vector 55" d="M7 0.5L0.5 9" stroke="black"/>
+<path id="Vector 61" d="M28 0.5L22 8.5" stroke="black"/>
+<path id="Vector 56" d="M10.5 1L0.5 14" stroke="black"/>
+<path id="Vector 62" d="M32 0.5L22 13.5" stroke="black"/>
+<path id="Vector 57" d="M14 1L3.5 14.5" stroke="black"/>
+<path id="Vector 63" d="M35.5 0.5L24.5 14.5" stroke="black"/>
+<path id="Vector 65 (Stroke)" d="M23.5771 7L22.2783 9.25L21.4121 8.75L22.1338 7.5H8.86621L9.58789 8.75L8.72168 9.25L7.42285 7L8.72168 4.75L9.58789 5.25L8.86621 6.5H22.1338L21.4121 5.25L22.2783 4.75L23.5771 7Z" fill="white" stroke-width="0.5" stroke="black"/>
+</g>
+</svg>

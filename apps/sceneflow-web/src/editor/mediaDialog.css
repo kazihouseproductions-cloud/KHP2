@@ -1,0 +1,76 @@
+.sf-import-dialog {
+  width: min(450px, 94vw);
+  padding: 22px;
+}
+.sf-import-dialog h2 {
+  margin: 0 0 7px;
+  font-size: 19px;
+  font-weight: 650;
+}
+.sf-import-dialog h2:focus {
+  outline: none;
+}
+.sf-import-dialog p {
+  overflow-wrap: anywhere;
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.sf-import-choices {
+  display: grid;
+  gap: 8px;
+}
+.sf-import-option {
+  display: grid;
+  gap: 3px;
+  padding: 11px 13px;
+  text-align: left;
+  border: 1px solid var(--sf-line);
+  border-radius: 7px;
+  color: var(--sf-teal);
+  background: white;
+}
+.sf-import-option:hover,
+.sf-import-option:focus-visible {
+  border-color: var(--sf-teal);
+  background: var(--sf-soft);
+}
+.sf-import-option strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+.sf-import-option span {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--sf-muted);
+}
+.sf-import-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sf-import-dialog label {
+  font-size: 12px;
+}
+.sf-import-dialog input,
+.sf-import-dialog select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--sf-line);
+  border-radius: 5px;
+  padding: 8px;
+  background: white;
+  color: var(--sf-text);
+}
+.sf-import-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+.sf-import-cancel {
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--sf-muted);
+}
